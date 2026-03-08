@@ -1,7 +1,12 @@
 package jdk
 
 import (
+	"context"
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 
 	"github.com/user/jem/internal/config"
 	"github.com/user/jem/internal/platform"
@@ -44,19 +49,21 @@ func (s *JDKService) List() ([]config.JDKInfo, error) {
 
 // Detect scans for JDKs in the system
 func (s *JDKService) Detect() ([]config.JDKInfo, error) {
-	paths := s.platform.JDKDetectionPaths()
-	var detected []config.JDKInfo
+	// Use Scan to properly scan subdirectories
+	jdkInfos, err := s.detector.Scan(context.Background())
+	if err != nil {
+		return nil, err
+	}
 
-	for _, path := range paths {
-		info, err := s.detector.DetectVersion(path)
-		if err == nil && info != "" {
-			detected = append(detected, config.JDKInfo{
-				Path:     path,
-				Version:  info,
-				Provider: "detected",
-				Managed:  false,
-			})
-		}
+	// Convert to config.JDKInfo
+	var detected []config.JDKInfo
+	for _, info := range jdkInfos {
+		detected = append(detected, config.JDKInfo{
+			Path:     info.Path,
+			Version:  info.Version,
+			Provider: info.Provider,
+			Managed:  info.Managed,
+		})
 	}
 
 	return detected, nil
@@ -92,4 +99,105 @@ func (s *JDKService) DetectVersion(jdkPath string) (string, error) {
 // GetJDKSymlinker returns the symlinker instance
 func (s *JDKService) GetJDKSymlinker() *JDKSymlinker {
 	return s.symlinker
+}
+
+// DetectSystemJava detects the currently active Java from JAVA_HOME or PATH
+func DetectSystemJava() *config.JDKInfo {
+	// Try JAVA_HOME first
+	javaHome := os.Getenv("JAVA_HOME")
+	if javaHome != "" {
+		version := detectJavaVersionFromPath(javaHome)
+		if version != "" {
+			return &config.JDKInfo{
+				Path:     javaHome,
+				Version:  version,
+				Provider: "system",
+				Managed:  false,
+			}
+		}
+	}
+
+	// Try java from PATH
+	javaPath, err := exec.LookPath("java")
+	if err == nil {
+		// Resolve symlink to find the actual JAVA_HOME
+		realPath, err := filepath.EvalSymlinks(javaPath)
+		if err == nil {
+			// java is typically in bin/ directory, go up to find JAVA_HOME
+			javaHome := filepath.Dir(filepath.Dir(realPath))
+			version := detectJavaVersionFromPath(javaHome)
+			if version != "" {
+				return &config.JDKInfo{
+					Path:     javaHome,
+					Version:  version,
+					Provider: "system",
+					Managed:  false,
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+// detectJavaVersionFromPath tries to detect Java version from a JDK path
+func detectJavaVersionFromPath(jdkPath string) string {
+	// Try release file first
+	releasePath := filepath.Join(jdkPath, "release")
+	if content, err := os.ReadFile(releasePath); err == nil {
+		version := parseReleaseFile(string(content))
+		if version != "" {
+			return version
+		}
+	}
+
+	// Try running java -version
+	javaBin := filepath.Join(jdkPath, "bin", "java")
+	if _, err := os.Stat(javaBin); err == nil {
+		cmd := exec.Command(javaBin, "-version")
+		output, err := cmd.CombinedOutput()
+		if err == nil {
+			return parseJavaVersionOutput(string(output))
+		}
+	}
+
+	return ""
+}
+
+// parseJavaVersionOutput parses java -version output
+func parseJavaVersionOutput(output string) string {
+	lines := strings.Split(output, "\n")
+	for _, line := range lines {
+		// Look for version line like: openjdk version "21.0.1" or java version "1.8.0_342"
+		if strings.Contains(line, "version") {
+			// Extract version between quotes
+			start := strings.Index(line, "\"")
+			if start != -1 {
+				end := strings.Index(line[start+1:], "\"")
+				if end != -1 {
+					version := line[start+1 : start+1+end]
+					// Normalize version (e.g., 1.8.0_342 -> 8)
+					return normalizeJavaVersion(version)
+				}
+			}
+		}
+	}
+	return ""
+}
+
+// normalizeJavaVersion normalizes Java version string
+func normalizeJavaVersion(version string) string {
+	// Handle old-style versions like 1.8.0_342
+	if strings.HasPrefix(version, "1.") {
+		parts := strings.Split(version, ".")
+		if len(parts) >= 2 {
+			return parts[1]
+		}
+	}
+	// Handle new-style versions like 21.0.1
+	parts := strings.Split(version, ".")
+	if len(parts) >= 1 {
+		return parts[0]
+	}
+	return version
 }

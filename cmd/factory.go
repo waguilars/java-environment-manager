@@ -22,21 +22,25 @@ type CommandFactory struct {
 // NewCommandFactory creates a new factory instance
 func NewCommandFactory() (*CommandFactory, error) {
 	// Detect platform
-	platform := platform.Detect()
+	plat := platform.Detect()
 
 	// Determine config path
-	homeDir := platform.HomeDir()
+	homeDir := plat.HomeDir()
 	configPath := filepath.Join(homeDir, ".jem", "config.toml")
 
-	// Create config repository
+	// Create config repository and load existing config
 	configRepo := config.NewTOMLConfigRepository(configPath)
+	if _, err := configRepo.Load(); err != nil {
+		// Non-fatal: continue with empty config
+		fmt.Fprintf(os.Stderr, "Warning: could not load config: %v\n", err)
+	}
 
-	// Create JDK service
-	jdkService := &jdk.JDKService{}
+	// Create JDK service with dependencies
+	jdkService := jdk.NewJDKService(plat, configRepo)
 
 	return &CommandFactory{
 		ctx:        context.Background(),
-		platform:   platform,
+		platform:   plat,
 		configRepo: configRepo,
 		jdkService: jdkService,
 	}, nil
@@ -79,6 +83,7 @@ func (f *CommandFactory) CreateUseCommand() *UseCommand {
 		platform:   f.platform,
 		configRepo: f.configRepo,
 		jdkService: f.jdkService,
+		prompter:   &SurveyPrompter{},
 	}
 }
 

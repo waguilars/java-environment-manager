@@ -46,7 +46,7 @@ func RootCommand() *cobra.Command {
 JDK versions on your local development machine.
 
 Supports Windows and Linux with automatic platform detection.`,
-		Version: "0.0.1-beta",
+		Version: "0.0.2-beta",
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
 			// Load config and validate environment
 			ctx := context.Background()
@@ -59,21 +59,8 @@ Supports Windows and Linux with automatic platform detection.`,
 			cmd.SetContext(context.WithValue(ctx, "factory", factory))
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			// If no arguments provided, show interactive menu
-			if len(args) == 0 {
-				// Check if non-interactive flag is set
-				nonInteractive := getFlagBool(cmd, "non-interactive")
-				if nonInteractive {
-					cmd.Help()
-					return
-				}
-
-				// Show interactive menu
-				if err := menu.Run(); err != nil {
-					fmt.Fprintf(os.Stderr, "Error running menu: %v\n", err)
-					os.Exit(1)
-				}
-			}
+			// Default behavior: show help
+			cmd.Help()
 		},
 	}
 
@@ -93,8 +80,46 @@ Supports Windows and Linux with automatic platform detection.`,
 	rootCmd.AddCommand(currentCommand())
 	rootCmd.AddCommand(useCommand())
 	rootCmd.AddCommand(installCommand())
+	rootCmd.AddCommand(tuiCommand())
 
 	return rootCmd
+}
+
+// executeMenuAction executes a command based on the menu selection
+func executeMenuAction(action string) {
+	factory, err := NewCommandFactory()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	ctx := context.Background()
+
+	fmt.Println() // Add newline for better output
+
+	switch action {
+	case "setup":
+		if err := factory.CreateSetupCommand().Execute(ctx); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		}
+	case "scan":
+		if err := factory.CreateScanCommand().Execute(ctx); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		}
+	case "list":
+		if err := factory.CreateListCommand().Execute(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		}
+	case "current":
+		if err := factory.CreateCurrentCommand().Execute(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		}
+	case "use":
+		fmt.Println("Use: jem use <version>")
+		fmt.Println("Please specify a JDK version to use.")
+	case "install":
+		fmt.Println("Use: jem install jdk <version>")
+		fmt.Println("Please specify a JDK version to install.")
+	}
 }
 
 // completionCommand creates the completion subcommand
@@ -184,29 +209,6 @@ Detects JDKs in standard locations and adds them to your configuration.`,
 	}
 }
 
-// listCommand creates the list subcommand
-func listCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:   "list",
-		Short: "List installed and detected JDKs",
-		Long: `List all installed and detected JDKs.
-		
-Shows both managed (installed by jem) and detected (found on system) JDKs.`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := cmd.Context()
-			factory, ok := ctx.Value("factory").(*CommandFactory)
-			if !ok || factory == nil {
-				var err error
-				factory, err = NewCommandFactory()
-				if err != nil {
-					return err
-				}
-			}
-			return factory.CreateListCommand().Execute()
-		},
-	}
-}
-
 // currentCommand creates the current subcommand
 func currentCommand() *cobra.Command {
 	return &cobra.Command{
@@ -230,13 +232,30 @@ Displays which JDK is currently being used by your system.`,
 	}
 }
 
-// useCommand creates the use subcommand
+// useCommand creates the use subcommand with jdk/gradle subcommands
 func useCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "use",
+		Short: "Switch to a different version",
+		Long: `Switch to a different JDK or Gradle version.
+
+You can use either an installed version or a detected one (it will be automatically imported).`,
+	}
+
+	// Add subcommands
+	cmd.AddCommand(useJDKCommand())
+	cmd.AddCommand(useGradleCommand())
+
+	return cmd
+}
+
+// useJDKCommand creates the 'use jdk' subcommand
+func useJDKCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:   "use <version>",
+		Use:   "jdk <version>",
 		Short: "Switch to a different JDK version",
 		Long: `Switch to a different JDK version.
-		
+
 You can use either an installed JDK or a detected one (it will be automatically imported).`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -249,7 +268,35 @@ You can use either an installed JDK or a detected one (it will be automatically 
 					return err
 				}
 			}
-			return factory.CreateUseCommand().Execute(ctx, args[0])
+			useCmd := factory.CreateUseCommand()
+			useCmd.SetForce(getFlagBool(cmd, "force"))
+			return useCmd.ExecuteJDK(ctx, args[0])
+		},
+	}
+}
+
+// useGradleCommand creates the 'use gradle' subcommand
+func useGradleCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "gradle <version>",
+		Short: "Switch to a different Gradle version",
+		Long: `Switch to a different Gradle version.
+
+You can use either an installed Gradle or a detected one (it will be automatically imported).`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			factory, ok := ctx.Value("factory").(*CommandFactory)
+			if !ok || factory == nil {
+				var err error
+				factory, err = NewCommandFactory()
+				if err != nil {
+					return err
+				}
+			}
+			useCmd := factory.CreateUseCommand()
+			useCmd.SetForce(getFlagBool(cmd, "force"))
+			return useCmd.ExecuteGradle(ctx, args[0])
 		},
 	}
 }
@@ -295,4 +342,26 @@ Examples:
 	cmd.Flags().Bool("force", false, "Force operation without prompts")
 
 	return cmd
+}
+
+// tuiCommand creates the tui subcommand
+func tuiCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "tui",
+		Short: "Launch interactive menu",
+		Long:  `Launch the interactive terminal user interface (TUI) for managing JDKs.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Show interactive menu and get selected action
+			action, err := menu.Run()
+			if err != nil {
+				return fmt.Errorf("error running menu: %w", err)
+			}
+
+			// Execute the selected action
+			if action != "" {
+				executeMenuAction(action)
+			}
+			return nil
+		},
+	}
 }

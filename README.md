@@ -1,40 +1,26 @@
 # jem - Java Environment Manager
 
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)](https://github.com/user/jem)
-[![Tests](https://img.shields.io/badge/tests-56%2F56%20passing-brightgreen.svg)](https://github.com/user/jem)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-`jem` (Java Environment Manager) is a CLI tool for managing multiple JDK and Gradle versions on your local development machine. It provides a simple, interactive interface for installing, switching, and managing Java development environments.
+`jem` (Java Environment Manager) is a CLI tool for managing multiple JDK and Gradle versions on your local development machine. It provides a simple interface for detecting, importing, and switching between Java development environments.
 
 ## Features
 
-- **Multi-version management**: Install and switch between multiple JDK versions
-- **Interactive menu**: User-friendly terminal interface with keyboard navigation
-- **Automatic detection**: Scan your system for existing JDK installations
+- **Multi-version management**: Switch between multiple JDK and Gradle versions
+- **Automatic detection**: Scan your system for existing JDK/Gradle installations (SDKMAN, /usr/lib/jvm, etc.)
+- **Import existing installations**: Use JDKs/Gradles already on your system without reinstalling
 - **Cross-platform**: Works on Windows and Linux with automatic platform detection
 - **Persistent configuration**: Settings persist across shell sessions
-- **Symlink-based**: Uses symlinks for fast version switching (< 3 commands)
-- **Multiple providers**: Support for Temurin, Corretto, Zulu, and more
-- **Gradle support**: Manage Gradle versions alongside JDKs
+- **Symlink-based**: Uses symlinks for fast version switching
 
 ## Prerequisites
 
-- **Go 1.26.1+** (for building from source)
+- **Go 1.21+** (for building from source)
 - **Windows 10+** or **Linux** (with bash/zsh)
-- **Internet connection** (for downloading JDKs)
 - **Developer Mode** (Windows, for symlinks - or run as administrator)
 
 ## Installation
-
-### From Binary (Recommended)
-
-Download the latest release from the [Releases page](https://github.com/user/jem/releases).
-
-```bash
-# Extract and move to PATH
-tar -xzf jem-linux-amd64.tar.gz
-sudo mv jem /usr/local/bin/
-```
 
 ### From Source
 
@@ -45,13 +31,7 @@ go build -o jem
 sudo mv jem /usr/local/bin/
 ```
 
-### Build from Source (with version)
-
-```bash
-go build -ldflags "-X main.Version=1.0.0" -o jem
-```
-
-## Basic Usage
+## Usage
 
 ### First Time Setup
 
@@ -59,28 +39,16 @@ go build -ldflags "-X main.Version=1.0.0" -o jem
 # Initialize jem configuration
 jem setup
 
-# This will:
-# - Create ~/.jem directory structure
-# - Add ~/.jem/bin to your PATH
-# - Configure JAVA_HOME and GRADLE_HOME
+# Scan for existing JDKs and Gradles on your system
+jem scan
 ```
 
 ### Interactive Mode
 
-Run `jem` without arguments to open the interactive menu:
-
 ```bash
-jem
+# Launch interactive TUI menu
+jem tui
 ```
-
-**Menu Options:**
-- `Setup` - Initialize jem configuration
-- `Scan` - Detect JDKs on your system
-- `List` - List installed JDKs
-- `Current` - Show active JDK version
-- `Use` - Switch JDK version
-- `Install` - Download and install JDK
-- `Exit` - Close menu
 
 **Navigation:**
 - `↑↓` Arrow keys - Navigate menu
@@ -89,85 +57,80 @@ jem
 
 ### CLI Commands
 
+#### List Available Versions
+
 ```bash
-# List all installed JDKs
+# List JDKs
 jem list jdk
 
-# Show current JDK version
+# List Gradles
+jem list gradle
+
+# List both
+jem list
+```
+
+#### Show Current Versions
+
+```bash
 jem current
+```
 
-# Switch to a specific JDK version
-jem use 17
+Output:
+```
+=== Current Environment ===
+JDK:     21.0.1 (/home/user/.jem/jdks/21-amzn) [jem]
+Gradle:  7.6.1 (/home/user/.jem/gradles/7.6.1) [jem]
+```
 
-# Install a specific JDK version
-jem install jdk 21
+#### Switch Versions
 
-# Install latest LTS version
-jem install jdk --lts
+```bash
+# Switch JDK (imports automatically if detected but not managed)
+jem use jdk 17.0.7
 
-# Scan system for existing JDKs
+# Switch Gradle
+jem use gradle 6.9.4
+
+# Skip confirmation prompt
+jem use jdk 21.0.1 --force
+```
+
+#### Scan System
+
+```bash
+# Detect JDKs and Gradles installed on your system
 jem scan
-
-# Generate shell completion
-jem completion bash  # or zsh, fish, powershell
 ```
 
-### Interactive Menus
-
-#### Use JDK Menu
-
-When running `jem use`, you'll see a menu of installed JDKs:
-
-```
-Select JDK to use:
-  ✓ temurin-17 (managed)
-  ✓ temurin-21 (managed)
-  ✓ corretto-17 (external)
-  ✓ zulu-11 (external)
-```
-
-#### Install Menu
-
-When running `jem install`, you'll see available versions:
-
-```
-Select JDK version:
-  ● 21.0.2 (LTS) [temurin]
-  ● 20.0.2         [temurin]
-  ○ 17.0.10 (LTS)  [temurin]
-  ○ 11.0.22        [temurin]
-
-Press 'l' to toggle LTS filter
-```
-
-## Supported JDK Providers
-
-| Provider | Distribution | Default |
-|----------|-------------|---------|
-| Eclipse Temurin | Adoptium | ✅ |
-| Amazon Corretto | Amazon | |
-| Azul Zulu | Azul Systems | |
-| Microsoft Build of OpenJDK | Microsoft | |
-| Oracle GraalVM | Oracle | |
-| BellSoft Liberica | BellSoft | |
-| IBM Semeru | IBM | |
-| IBM SDK (WebSphere) | IBM | |
+Detects installations from:
+- `~/.sdkman/candidates/java/` and `~/.sdkman/candidates/gradle/` (SDKMAN)
+- `/usr/lib/jvm/` (Linux)
+- `~/.jdks/` (IntelliJ IDEA)
+- `/opt/gradle/` (Linux)
 
 ## Project Structure
 
 ```
 jem/
-├── cmd/              # CLI command definitions
+├── cmd/                    # CLI command definitions
+│   ├── root.go            # Root command and subcommands
+│   ├── current.go         # Current command
+│   ├── list.go            # List command (jdk/gradle)
+│   ├── scan.go            # Scan command
+│   ├── use.go             # Use command (jdk/gradle)
+│   ├── install.go         # Install command
+│   └── factory.go         # Dependency injection
 ├── internal/
-│   ├── config/       # Configuration management
-│   ├── downloader/   # Download and extraction logic
-│   ├── jdk/          # JDK management logic
-│   ├── menu/         # Interactive menu system
-│   ├── platform/     # OS-specific functionality
-│   ├── provider/     # JDK provider integrations
-│   └── ui/           # UI components (spinner, progress)
+│   ├── config/            # Configuration management (TOML)
+│   ├── downloader/        # Download and extraction logic
+│   ├── jdk/               # JDK detection and management
+│   ├── menu/              # Interactive TUI (Bubble Tea)
+│   ├── platform/          # OS-specific functionality
+│   ├── provider/          # JDK provider integrations (Temurin)
+│   └── ui/                # UI components (spinner, progress)
 ├── pkg/
-│   └── interactive/  # Interactive utilities
+│   └── interactive/       # Interactive utilities
 ├── go.mod
 └── main.go
 ```
@@ -177,37 +140,62 @@ jem/
 jem stores configuration in `~/.jem/config.toml`:
 
 ```toml
-[jdk]
-current = "temurin-21"
+[general]
+  default_provider = "temurin"
 
-[jdks]
-  [jdks.temurin-21]
-    path = "/home/user/.jem/jdks/temurin-21"
-    provider = "temurin"
-    version = "21.0.2"
-    managed = true
+[jdk]
+  current = "21.0.1"
 
 [gradle]
-current = "gradle-8.6"
+  current = "7.6.1"
+
+["jdks.installed"]
+  ["jdks.installed"."/home/user/.jem/jdks/21-amzn"]
+    path = "/home/user/.jem/jdks/21-amzn"
+    version = "21.0.1"
+    provider = "imported"
+    managed = true
+
+["gradles.installed"]
+  ["gradles.installed"."/home/user/.jem/gradles/7.6.1"]
+    path = "/home/user/.jem/gradles/7.6.1"
+    version = "7.6.1"
+    managed = true
 ```
 
 ## Directory Structure
 
 ```
 ~/.jem/
-├── bin/                    # Symlinks to executables (add to PATH)
-│   ├── java -> ../jdks/current/bin/java
-│   ├── javac -> ../jdks/current/bin/javac
-│   └── gradle -> ../gradles/current/bin/gradle
-├── jdks/                   # JDK installations
-│   ├── temurin-17/
-│   ├── temurin-21/
-│   └── current -> temurin-21/
+├── bin/                    # Symlinks to current JDK/Gradle executables
+│   └── java -> ../jdks/current/bin/java
+├── jdks/                   # JDK installations (symlinks to imported)
+│   ├── 21-amzn/
+│   ├── 17.0.7-tem/
+│   └── current -> 21-amzn/
 ├── gradles/                # Gradle installations
-│   ├── gradle-8.5/
-│   ├── gradle-8.6/
-│   └── current -> gradle-8.6/
+│   ├── 7.6.1/
+│   └── current -> 7.6.1/
 └── config.toml             # Configuration file
+```
+
+## Pending Issues
+
+### `install` Command
+
+The `install` command has known issues:
+
+1. **JDK download returns 404**: The Temurin API integration needs to be fixed. The download URL generation is incorrect.
+
+2. **No Gradle install support**: `jem install gradle <version>` is not implemented. Currently, you can only use Gradle versions detected by `jem scan`.
+
+**Workaround**: Use SDKMAN or manually install JDKs/Gradles, then run `jem scan` to detect and `jem use` to switch.
+
+```bash
+# Workaround: Use SDKMAN to install, then import with jem
+sdk install java 21.0.1-tem
+jem scan
+jem use jdk 21.0.1 --force
 ```
 
 ## Contributing
@@ -222,8 +210,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea) for the interactive UI
 - Uses [Cobra](https://github.com/spf13/cobra) for CLI command structure
-- Icons from [lipgloss](https://github.com/charmbracelet/lipgloss)
-
-## Status
-
-✅ **Production Ready** - All 84 tasks complete, 56 tests passing, 13MB binary
+- Styling with [lipgloss](https://github.com/charmbracelet/lipgloss)

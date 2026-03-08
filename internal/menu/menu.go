@@ -17,15 +17,16 @@ type MenuItem struct {
 
 // Model represents the main menu state
 type Model struct {
-	cursor    int
-	items     []MenuItem
-	selected  map[int]struct{}
-	quitting  bool
-	spinner   spinner.Model
-	loading   bool
-	statusMsg string
-	width     int
-	height    int
+	cursor         int
+	items          []MenuItem
+	selected       map[int]struct{}
+	quitting       bool
+	spinner        spinner.Model
+	loading        bool
+	statusMsg      string
+	width          int
+	height         int
+	selectedAction string
 }
 
 // Initial model state
@@ -84,7 +85,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.quitting = true
 				return m, tea.Quit
 			}
-			return m, tea.Batch(m.handleSelection(), tea.Quit)
+			// Save the selected action before quitting
+			m.selectedAction = m.items[m.cursor].Action
+			return m, tea.Quit
 		}
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -95,15 +98,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 	return m, nil
-}
-
-// Handle selection and return appropriate command
-func (m Model) handleSelection() tea.Cmd {
-	action := m.items[m.cursor].Action
-	return tea.Batch(
-		tea.Printf("action:%s", action),
-		tea.Quit,
-	)
 }
 
 // View renders the menu UI
@@ -163,11 +157,19 @@ func (m Model) View() tea.View {
 	return tea.NewView(s)
 }
 
-// Run the interactive menu
-func Run() error {
+// Run the interactive menu and return the selected action
+func Run() (string, error) {
 	p := tea.NewProgram(NewModel())
-	_, err := p.Run()
-	return err
+	model, err := p.Run()
+	if err != nil {
+		return "", err
+	}
+
+	// Extract the selected action from the model
+	if m, ok := model.(Model); ok && m.selectedAction != "" {
+		return m.selectedAction, nil
+	}
+	return "", nil
 }
 
 // IsInteractive checks if terminal is interactive
