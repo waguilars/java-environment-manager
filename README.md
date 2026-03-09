@@ -2,6 +2,7 @@
 
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)](https://github.com/user/jem)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/version-0.2.0--beta-orange.svg)](https://github.com/user/jem)
 
 `jem` (Java Environment Manager) is a CLI tool for managing multiple JDK and Gradle versions on your local development machine. It provides a simple interface for detecting, importing, and switching between Java development environments.
 
@@ -27,9 +28,29 @@
 ```bash
 git clone https://github.com/user/jem.git
 cd jem
+
+# Build with Makefile
+make build
+
+# Or build directly
 go build -o jem
-sudo mv jem /usr/local/bin/
+
+# Install to /usr/local/bin
+sudo make install
 ```
+
+### Pre-built Binaries
+
+Download the latest release for your platform:
+
+| Platform | Architecture | Binary |
+|----------|--------------|--------|
+| Windows | amd64 | `jem-windows-amd64.exe` |
+| Windows | arm64 | `jem-windows-arm64.exe` |
+| Linux | amd64 | `jem-linux-amd64` |
+| Linux | arm64 | `jem-linux-arm64` |
+| macOS | amd64 | `jem-darwin-amd64` |
+| macOS | arm64 | `jem-darwin-arm64` |
 
 ## Usage
 
@@ -131,6 +152,9 @@ jem/
 │   └── ui/                # UI components (spinner, progress)
 ├── pkg/
 │   └── interactive/       # Interactive utilities
+├── Makefile               # Build automation
+├── VERSION                # Current version (SemVer 2.0.0)
+├── CHANGELOG.md           # Version history
 ├── go.mod
 └── main.go
 ```
@@ -179,6 +203,60 @@ jem stores configuration in `~/.jem/config.toml`:
 └── config.toml             # Configuration file
 ```
 
+## Development
+
+### Building
+
+```bash
+# Build for current platform
+make build
+
+# Build for all platforms
+make build-linux build-darwin build-windows
+
+# Run tests
+make test
+
+# Run tests with coverage
+make test-cover
+
+# Show current version
+make version
+```
+
+### Versioning
+
+This project follows [Semantic Versioning 2.0.0](https://semver.org/).
+
+| Component | When to increment |
+|-----------|-------------------|
+| **MAJOR** | Incompatible API changes |
+| **MINOR** | New backward-compatible features |
+| **PATCH** | Backward-compatible bug fixes |
+| **Pre-release** | `-beta`, `-rc.1`, `-alpha` suffixes |
+
+#### Creating a Release
+
+```bash
+# Create a release (Linux/macOS/WSL)
+./release.sh 0.2.0-beta
+
+# Create a release (Windows PowerShell)
+.\release.ps1 -Version 0.2.0-beta
+
+# Or use Makefile
+make release version=0.2.0-beta
+```
+
+The release script will:
+1. Update version in `VERSION`, `main.go`, and `cmd/root.go`
+2. Run all tests
+3. Build binaries for all platforms
+4. Create a git tag
+5. Verify all assets
+
+See [CHANGELOG.md](CHANGELOG.md) for version history.
+
 ## Pending Issues
 
 ### `install` Command
@@ -210,4 +288,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea) for the interactive UI
 - Uses [Cobra](https://github.com/spf13/cobra) for CLI command structure
-- Styling with [lipgloss](https://github.com/charmbracelet/lipgloss)
+- Styling with [Lipgloss](https://github.com/charmbracelet/lipgloss)
+- Versioning follows [SemVer 2.0.0](https://semver.org/)
+- Changelog follows [Keep a Changelog](https://keepachangelog.com/)

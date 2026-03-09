@@ -46,7 +46,7 @@ func RootCommand() *cobra.Command {
 JDK versions on your local development machine.
 
 Supports Windows and Linux with automatic platform detection.`,
-		Version: "0.0.2-beta",
+		Version: "0.2.0-beta",
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
 			// Load config and validate environment
 			ctx := context.Background()
