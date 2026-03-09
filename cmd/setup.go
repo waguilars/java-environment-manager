@@ -24,47 +24,54 @@ func (c *SetupCommand) Execute(ctx context.Context) error {
 
 	// Check if already configured
 	configPath := filepath.Join(jemDir, "config.toml")
+	configExists := false
 	if _, err := os.Stat(configPath); err == nil {
-		fmt.Println("jem is already configured.")
-		fmt.Printf("Configuration file: %s\n", configPath)
-		return nil
+		configExists = true
 	}
 
-	// Create directory structure
-	fmt.Println("Creating jem directory structure...")
-	if err := os.MkdirAll(jemDir, 0755); err != nil {
-		return fmt.Errorf("failed to create %s: %w", jemDir, err)
-	}
+	// State tracking for summary messages
+	configCreated := false
+	shellConfigured := false
 
-	dirs := []string{"bin", "jdks", "gradles"}
-	for _, dir := range dirs {
-		if err := os.MkdirAll(filepath.Join(jemDir, dir), 0755); err != nil {
-			return fmt.Errorf("failed to create %s: %w", filepath.Join(jemDir, dir), err)
+	// Create directory structure and config if needed
+	if !configExists {
+		fmt.Println("Creating jem directory structure...")
+		if err := os.MkdirAll(jemDir, 0755); err != nil {
+			return fmt.Errorf("failed to create %s: %w", jemDir, err)
 		}
+
+		dirs := []string{"bin", "jdks", "gradles"}
+		for _, dir := range dirs {
+			if err := os.MkdirAll(filepath.Join(jemDir, dir), 0755); err != nil {
+				return fmt.Errorf("failed to create %s: %w", filepath.Join(jemDir, dir), err)
+			}
+		}
+
+		// Create default config
+		cfg := &config.Config{
+			General: config.GeneralConfig{
+				DefaultProvider: "temurin",
+			},
+			JDK: config.JDKConfig{
+				Current: "",
+			},
+			Gradle: config.GradleConfig{
+				Current: "",
+			},
+			InstalledJDKs:    make(map[string]config.JDKInfo),
+			DetectedJDKs:     make(map[string]config.JDKInfo),
+			InstalledGradles: make(map[string]config.GradleInfo),
+			DetectedGradles:  make(map[string]config.GradleInfo),
+		}
+
+		if err := c.configRepo.Save(cfg); err != nil {
+			return fmt.Errorf("failed to save config: %w", err)
+		}
+
+		configCreated = true
 	}
 
-	// Create default config
-	cfg := &config.Config{
-		General: config.GeneralConfig{
-			DefaultProvider: "temurin",
-		},
-		JDK: config.JDKConfig{
-			Current: "",
-		},
-		Gradle: config.GradleConfig{
-			Current: "",
-		},
-		InstalledJDKs:    make(map[string]config.JDKInfo),
-		DetectedJDKs:     make(map[string]config.JDKInfo),
-		InstalledGradles: make(map[string]config.GradleInfo),
-		DetectedGradles:  make(map[string]config.GradleInfo),
-	}
-
-	if err := c.configRepo.Save(cfg); err != nil {
-		return fmt.Errorf("failed to save config: %w", err)
-	}
-
-	// Configure shell
+	// Configure shell - ALWAYS runs regardless of config state
 	shell := c.platform.DetectShell()
 	shellConfigPath := c.platform.ShellConfigPath(shell)
 
@@ -77,18 +84,28 @@ func (c *SetupCommand) Execute(ctx context.Context) error {
 		if err := c.configureShell(shell, shellConfigPath); err != nil {
 			return fmt.Errorf("failed to configure shell: %w", err)
 		}
+		shellConfigured = true
 	}
 
-	// Print success message
+	// Print success message based on what was done
 	fmt.Println("\n✓ jem setup completed successfully!")
-	fmt.Printf("\nDirectory structure created at: %s\n", jemDir)
-	fmt.Printf("Configuration file: %s\n", configPath)
 
-	if shell == config.Shell("powershell") {
-		fmt.Println("\nTo apply changes, restart PowerShell.")
+	if configCreated {
+		fmt.Printf("\nDirectory structure created at: %s\n", jemDir)
+		fmt.Printf("Configuration file: %s\n", configPath)
 	} else {
-		fmt.Printf("\nTo apply changes, run: source %s\n", shellConfigPath)
-		fmt.Println("Or restart your terminal.")
+		fmt.Println("\nConfiguration file already exists.")
+	}
+
+	if shellConfigured {
+		if shell == config.Shell("powershell") {
+			fmt.Println("\nTo apply changes, restart PowerShell.")
+		} else {
+			fmt.Printf("\nTo apply changes, run: source %s\n", shellConfigPath)
+			fmt.Println("Or restart your terminal.")
+		}
+	} else {
+		fmt.Println("\nShell already configured.")
 	}
 
 	return nil
@@ -103,7 +120,20 @@ func (c *SetupCommand) isShellConfigured(shellConfigPath string) bool {
 		return false
 	}
 
-	content, err := os.ReadFile(shellConfigPath)
+	// Resolve symlink if the path is a symlink
+	resolvedPath := shellConfigPath
+	if info, err := os.Lstat(shellConfigPath); err == nil && info.Mode()&os.ModeSymlink != 0 {
+		resolvedPath, err = os.Readlink(shellConfigPath)
+		if err != nil {
+			return false
+		}
+		// Handle relative symlinks
+		if !filepath.IsAbs(resolvedPath) {
+			resolvedPath = filepath.Join(filepath.Dir(shellConfigPath), resolvedPath)
+		}
+	}
+
+	content, err := os.ReadFile(resolvedPath)
 	if err != nil {
 		return false
 	}
@@ -113,22 +143,35 @@ func (c *SetupCommand) isShellConfigured(shellConfigPath string) bool {
 
 // configureShell adds jem to the shell's PATH
 func (c *SetupCommand) configureShell(shell config.Shell, shellConfigPath string) error {
+	// Resolve symlink if the path is a symlink
+	resolvedPath := shellConfigPath
+	if info, err := os.Lstat(shellConfigPath); err == nil && info.Mode()&os.ModeSymlink != 0 {
+		resolvedPath, err = os.Readlink(shellConfigPath)
+		if err != nil {
+			return fmt.Errorf("failed to resolve symlink: %w", err)
+		}
+		// Handle relative symlinks
+		if !filepath.IsAbs(resolvedPath) {
+			resolvedPath = filepath.Join(filepath.Dir(shellConfigPath), resolvedPath)
+		}
+	}
+
 	// Create backup if file exists
-	if _, err := os.Stat(shellConfigPath); err == nil {
-		backupPath := shellConfigPath + ".jem.backup"
-		if err := os.Rename(shellConfigPath, backupPath); err != nil {
+	if _, err := os.Stat(resolvedPath); err == nil {
+		backupPath := resolvedPath + ".jem.backup"
+		if err := os.Rename(resolvedPath, backupPath); err != nil {
 			return fmt.Errorf("failed to create backup: %w", err)
 		}
 	}
 
 	// Create directory if it doesn't exist
-	dir := filepath.Dir(shellConfigPath)
+	dir := filepath.Dir(resolvedPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("failed to create directory: %w", err)
 	}
 
 	// Open file in append mode
-	file, err := os.OpenFile(shellConfigPath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
+	file, err := os.OpenFile(resolvedPath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
 	if err != nil {
 		return fmt.Errorf("failed to open file: %w", err)
 	}

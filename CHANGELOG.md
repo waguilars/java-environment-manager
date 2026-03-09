@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- `jem setup` now configures shell even when config.toml already exists (was exiting early)
+- Added comprehensive test suite for setup command (14 test cases)
+
 ## [0.3.0-beta] - 2026-03-09
 
 ### Added
