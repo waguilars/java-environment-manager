@@ -7,7 +7,7 @@ import (
 	"github.com/user/jem/cmd"
 )
 
-var Version = "0.2.0-beta"
+var Version = "0.3.0-beta"
 
 func main() {
 	rootCmd := cmd.RootCommand()

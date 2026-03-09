@@ -130,6 +130,37 @@ Detects installations from:
 - `~/.jdks/` (IntelliJ IDEA)
 - `/opt/gradle/` (Linux)
 
+#### Install JDKs and Gradle
+
+```bash
+# Install latest LTS JDK
+jem install jdk --lts
+
+# Install specific JDK version
+jem install jdk 21
+
+# Install specific Gradle version
+jem install gradle 8.5
+
+# Install latest Gradle
+jem install gradle latest
+```
+
+Downloads are verified with SHA256 checksums. JDKs are downloaded from Eclipse Temurin (Adoptium) and Gradle from the official Gradle distributions.
+
+#### Import Existing Installations
+
+```bash
+# Import an existing JDK installation
+jem import jdk /path/to/jdk-21
+
+# Import an existing Gradle installation
+jem import gradle /opt/gradle-8.5
+
+# Import with custom name
+jem import gradle /opt/gradle-8.5 --name work-gradle
+```
+
 ## Project Structure
 
 ```
@@ -256,25 +287,6 @@ The release script will:
 5. Verify all assets
 
 See [CHANGELOG.md](CHANGELOG.md) for version history.
-
-## Pending Issues
-
-### `install` Command
-
-The `install` command has known issues:
-
-1. **JDK download returns 404**: The Temurin API integration needs to be fixed. The download URL generation is incorrect.
-
-2. **No Gradle install support**: `jem install gradle <version>` is not implemented. Currently, you can only use Gradle versions detected by `jem scan`.
-
-**Workaround**: Use SDKMAN or manually install JDKs/Gradles, then run `jem scan` to detect and `jem use` to switch.
-
-```bash
-# Workaround: Use SDKMAN to install, then import with jem
-sdk install java 21.0.1-tem
-jem scan
-jem use jdk 21.0.1 --force
-```
 
 ## Contributing
 

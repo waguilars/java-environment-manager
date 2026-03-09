@@ -17,14 +17,26 @@ const (
 // TemurinProvider implements JDKProvider for Eclipse Temurin (Adoptium)
 type TemurinProvider struct {
 	httpClient *http.Client
+	apiBaseURL string
 }
 
-// NewTemurinProvider creates a new TemurinProvider
+// NewTemurinProvider creates a new TemurinProvider with the default API base URL
 func NewTemurinProvider() *TemurinProvider {
 	return &TemurinProvider{
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
+		apiBaseURL: temurinAPIBase,
+	}
+}
+
+// NewTemurinProviderWithBase creates a new TemurinProvider with a custom API base URL (for testing)
+func NewTemurinProviderWithBase(baseURL string) *TemurinProvider {
+	return &TemurinProvider{
+		httpClient: &http.Client{
+			Timeout: 30 * time.Second,
+		},
+		apiBaseURL: baseURL,
 	}
 }
 
@@ -40,17 +52,33 @@ func (p *TemurinProvider) DisplayName() string {
 
 // ListAvailable returns available JDK releases matching the criteria
 func (p *TemurinProvider) ListAvailable(ctx context.Context, opts ListOptions) ([]JDKRelease, error) {
-	url := fmt.Sprintf("%s/releases?architecture=x64&os=linux&image_type=jdk&sortMethod=VERSION&sortOrder=DESC", temurinAPIBase)
+	// Determine OS and architecture based on options
+	os := "linux"
+	architecture := "x64"
+	archiveType := "tar.gz"
 
-	if opts.MajorVersion > 0 {
-		url = fmt.Sprintf("%s&version=%d", url, opts.MajorVersion)
+	if opts.OS != "" {
+		os = opts.OS
+	}
+	if opts.Architecture != "" {
+		architecture = opts.Architecture
 	}
 
+	// Determine archive type based on OS
+	if os == "windows" {
+		archiveType = "zip"
+	}
+
+	// Build the API URL
+	url := fmt.Sprintf("%s/assets/latest/%d/hotspot?architecture=%s&os=%s&image_type=jdk",
+		p.apiBaseURL, opts.MajorVersion, architecture, os)
+
+	// Add LTS filter if requested
 	if opts.OnlyLTS {
-		url = fmt.Sprintf("%s&lts=true", url)
+		url += "&lts=true"
 	}
 
-	return p.fetchReleases(ctx, url)
+	return p.fetchReleases(ctx, url, archiveType)
 }
 
 // GetLatestLTS returns the latest LTS release
@@ -108,7 +136,7 @@ func (p *TemurinProvider) GetChecksum(release JDKRelease) string {
 }
 
 // fetchReleases fetches releases from the Adoptium API
-func (p *TemurinProvider) fetchReleases(ctx context.Context, url string) ([]JDKRelease, error) {
+func (p *TemurinProvider) fetchReleases(ctx context.Context, url string, archiveType string) ([]JDKRelease, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -129,55 +157,108 @@ func (p *TemurinProvider) fetchReleases(ctx context.Context, url string) ([]JDKR
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
 
-	// Parse the response
-	// Note: This is a simplified parser - actual API response format may vary
-	var releases []JDKRelease
+	// Parse the response - the API returns an array of release objects
+	var releases []temurinAPIResponse
 	if err := json.Unmarshal(body, &releases); err != nil {
 		return nil, fmt.Errorf("failed to parse API response: %w", err)
 	}
 
-	return releases, nil
+	// Convert to JDKRelease format
+	var result []JDKRelease
+	for _, r := range releases {
+		jdkRelease, err := parseTemurinResponse(r, archiveType)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, *jdkRelease)
+	}
+
+	return result, nil
 }
 
-// parseJDKRelease parses a single release from the API response
-func parseJDKRelease(data map[string]interface{}) (*JDKRelease, error) {
-	versionStr, ok := data["version"].(string)
-	if !ok {
-		return nil, fmt.Errorf("missing version field")
+// parseTemurinResponse parses a single release from the API response
+func parseTemurinResponse(resp temurinAPIResponse, archiveType string) (*JDKRelease, error) {
+	versionStr := resp.Version.Name
+	major := resp.Version.Major
+
+	// Find the correct binary for the requested architecture and OS
+	var binary temurinBinary
+	found := false
+
+	for _, b := range resp.Binaries {
+		if b.Architecture == "x64" || b.Architecture == "x86" || b.Architecture == "x32" {
+			binary = b
+			found = true
+			break
+		}
+	}
+
+	if !found && len(resp.Binaries) > 0 {
+		binary = resp.Binaries[0]
+		found = true
+	}
+
+	if !found {
+		return nil, fmt.Errorf("no binary found for release %s", versionStr)
+	}
+
+	packageInfo := binary.Package
+	if packageInfo.Link == "" {
+		return nil, fmt.Errorf("no download link found for release %s", versionStr)
 	}
 
 	// Parse version components
-	var major int
-	parts := strings.Split(versionStr, ".")
+	var majorVersion int
+	parts := strings.Split(versionStr, "+")
 	if len(parts) > 0 {
-		fmt.Sscanf(parts[0], "%d", &major)
+		// Try to extract major from the version string
+		versionParts := strings.Split(parts[0], ".")
+		if len(versionParts) > 0 {
+			fmt.Sscanf(versionParts[0], "%d", &majorVersion)
+		}
 	}
 
-	// Extract release metadata
+	// Determine archive type from the download link
+	archiveTypeFromURL := archiveType
+	if strings.HasSuffix(packageInfo.Link, ".zip") {
+		archiveTypeFromURL = "zip"
+	}
+
 	release := &JDKRelease{
 		Version:      versionStr,
 		Major:        major,
-		Architecture: "x64",
-		ArchiveType:  "tar.gz",
+		URL:          packageInfo.Link,
+		Checksum:     packageInfo.Checksum,
+		Architecture: binary.Architecture,
+		ArchiveType:  archiveTypeFromURL,
 		ReleaseType:  "ga",
 	}
 
-	// Parse additional fields if present
-	if v, ok := data["binary"].(map[string]interface{}); ok {
-		if url, ok := v["link"].(string); ok {
-			release.URL = url
-		}
-		if checksum, ok := v["checksum"].(string); ok {
-			release.Checksum = checksum
-		}
-		if archiveType, ok := v["package"].(map[string]interface{}); ok {
-			if atype, ok := archiveType["link"].(string); ok {
-				if strings.HasSuffix(atype, ".zip") {
-					release.ArchiveType = "zip"
-				}
-			}
-		}
-	}
-
 	return release, nil
+}
+
+// temurinAPIResponse represents the Adoptium API response structure
+type temurinAPIResponse struct {
+	Version  temurinVersion  `json:"version"`
+	Binaries []temurinBinary `json:"binaries"`
+}
+
+type temurinVersion struct {
+	Name  string `json:"name"`  // e.g., "21.0.2+13"
+	Major int    `json:"major"` // e.g., 21
+	Minor int    `json:"minor"`
+	Patch int    `json:"patch"`
+}
+
+type temurinBinary struct {
+	Architecture string         `json:"architecture"` // e.g., "x64"
+	OS           string         `json:"os"`           // e.g., "linux"
+	Package      temurinPackage `json:"package"`
+}
+
+type temurinPackage struct {
+	Link     string `json:"link"`     // Download URL
+	Checksum string `json:"checksum"` // SHA256
+	Name     string `json:"name"`     // Filename
+	Size     int64  `json:"size"`     // Bytes
 }

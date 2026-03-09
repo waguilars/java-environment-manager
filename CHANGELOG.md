@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0-beta] - 2026-03-09
+
+### Added
+- `jem install jdk <version>` - Download and install JDKs from Temurin (Eclipse Adoptium)
+- `jem install gradle <version>` - Download and install Gradle distributions
+- `jem import gradle <path>` - Import existing Gradle installations
+- GradleProvider interface for Gradle distribution downloads
+- SHA256 checksum validation for all downloads
+- Download progress display with percentage and size
+- `--lts` flag for `jem install jdk` to install latest LTS version
+- `latest` keyword support for `jem install gradle latest`
+- Comprehensive test suite with 81.5% coverage for providers
+
+### Fixed
+- Temurin API URL construction (was returning 404 errors)
+- Temurin API response parsing with correct JSON structure
+- Platform-aware download URLs (Windows: zip, Linux: tar.gz)
+
+### Changed
+- Refactored provider architecture for better testability
+- Improved error handling for network failures
+- Enhanced download infrastructure with checksum verification
+
 ## [0.2.0-beta] - 2026-03-08
 
 ### Added

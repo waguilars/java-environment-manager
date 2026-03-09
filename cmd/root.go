@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 	"github.com/user/jem/internal/menu"
@@ -46,7 +47,7 @@ func RootCommand() *cobra.Command {
 JDK versions on your local development machine.
 
 Supports Windows and Linux with automatic platform detection.`,
-		Version: "0.2.0-beta",
+		Version: "0.3.0-beta",
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
 			// Load config and validate environment
 			ctx := context.Background()
@@ -80,6 +81,7 @@ Supports Windows and Linux with automatic platform detection.`,
 	rootCmd.AddCommand(currentCommand())
 	rootCmd.AddCommand(useCommand())
 	rootCmd.AddCommand(installCommand())
+	rootCmd.AddCommand(importCommand())
 	rootCmd.AddCommand(tuiCommand())
 
 	return rootCmd
@@ -304,15 +306,53 @@ You can use either an installed Gradle or a detected one (it will be automatical
 // installCommand creates the install subcommand
 func installCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "install jdk <version>",
-		Short: "Install a JDK version",
-		Long: `Install a JDK version from a provider (default: Temurin).
+		Use:   "install [jdk|gradle] <version>",
+		Short: "Install a JDK or Gradle version",
+		Long: `Install a JDK or Gradle version from a provider (default: Temurin for JDK, Gradle for Gradle).
 		
 Examples:
   jem install jdk 21
   jem install jdk --lts
-  jem install jdk temurin-17`,
-		Args: cobra.ExactArgs(2),
+  jem install gradle 8.5
+  jem install gradle latest`,
+	}
+
+	// Add subcommands
+	cmd.AddCommand(installJDKCommand())
+	cmd.AddCommand(installGradleCommand())
+
+	return cmd
+}
+
+// importCommand creates the import subcommand
+func importCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "import [jdk|gradle] <path>",
+		Short: "Import an external JDK or Gradle installation",
+		Long: `Import an external JDK or Gradle installation into jem management.
+		
+Examples:
+  jem import jdk /opt/jdk-21
+  jem import gradle /opt/gradle-8.5`,
+	}
+
+	// Add subcommands
+	cmd.AddCommand(importJDKCommand())
+	cmd.AddCommand(importGradleCommand())
+
+	return cmd
+}
+
+// importJDKCommand creates the 'import jdk' subcommand
+func importJDKCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "jdk <path>",
+		Short: "Import an external JDK installation",
+		Long: `Import an external JDK installation into jem management.
+		
+Examples:
+  jem import jdk /opt/jdk-21`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 			factory, ok := ctx.Value("factory").(*CommandFactory)
@@ -324,24 +364,110 @@ Examples:
 				}
 			}
 
-			version := args[1]
+			path := args[0]
+			importCmd := factory.CreateImportCommand()
+
+			// Use the directory name as the name if not specified
+			name := filepath.Base(path)
+
+			return importCmd.ExecuteJDK(ctx, path, name)
+		},
+	}
+}
+
+// importGradleCommand creates the 'import gradle' subcommand
+func importGradleCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "gradle <path>",
+		Short: "Import an external Gradle installation",
+		Long: `Import an external Gradle installation into jem management.
+		
+Examples:
+  jem import gradle /opt/gradle-8.5`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			factory, ok := ctx.Value("factory").(*CommandFactory)
+			if !ok || factory == nil {
+				var err error
+				factory, err = NewCommandFactory()
+				if err != nil {
+					return err
+				}
+			}
+
+			path := args[0]
+			importCmd := factory.CreateImportGradleCommand()
+
+			// Use the directory name as the name if not specified
+			name := filepath.Base(path)
+
+			return importCmd.ExecuteGradle(ctx, path, name)
+		},
+	}
+}
+
+// installJDKCommand creates the 'install jdk' subcommand
+func installJDKCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "jdk <version>",
+		Short: "Install a JDK version",
+		Long: `Install a JDK version from a provider (default: Temurin).
+		
+Examples:
+  jem install jdk 21
+  jem install jdk --lts`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			factory, ok := ctx.Value("factory").(*CommandFactory)
+			if !ok || factory == nil {
+				var err error
+				factory, err = NewCommandFactory()
+				if err != nil {
+					return err
+				}
+			}
+
+			version := args[0]
 			installCmd := factory.CreateInstallCommand()
 			installCmd.SetForce(getFlagBool(cmd, "force"))
 			installCmd.SetOnlyLTS(getFlagBool(cmd, "lts"))
 
-			// Parse major version if not using --lts
-			if !getFlagBool(cmd, "lts") {
-				// Major version is already parsed in findRelease
-			}
-
-			return installCmd.Execute(ctx, version)
+			return installCmd.ExecuteJDK(ctx, version)
 		},
 	}
+}
 
-	cmd.Flags().Bool("lts", false, "Install the latest LTS version")
-	cmd.Flags().Bool("force", false, "Force operation without prompts")
+// installGradleCommand creates the 'install gradle' subcommand
+func installGradleCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "gradle <version>",
+		Short: "Install a Gradle version",
+		Long: `Install a Gradle version from the official Gradle provider.
+		
+Examples:
+  jem install gradle 8.5
+  jem install gradle latest`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			factory, ok := ctx.Value("factory").(*CommandFactory)
+			if !ok || factory == nil {
+				var err error
+				factory, err = NewCommandFactory()
+				if err != nil {
+					return err
+				}
+			}
 
-	return cmd
+			version := args[0]
+			installCmd := factory.CreateInstallCommand()
+			installCmd.SetForce(getFlagBool(cmd, "force"))
+
+			return installCmd.ExecuteGradle(ctx, version)
+		},
+	}
 }
 
 // tuiCommand creates the tui subcommand

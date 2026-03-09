@@ -105,6 +105,15 @@ func (f *CommandFactory) CreateImportCommand() *ImportCommand {
 	}
 }
 
+// CreateImportGradleCommand creates an import command instance for Gradle
+func (f *CommandFactory) CreateImportGradleCommand() *ImportCommand {
+	return &ImportCommand{
+		platform:   f.platform,
+		configRepo: f.configRepo,
+		jdkService: f.jdkService,
+	}
+}
+
 // Context returns the command context
 func (f *CommandFactory) Context() context.Context {
 	return f.ctx

@@ -15,15 +15,16 @@ import (
 
 // InstallCommand handles the 'jem install' command
 type InstallCommand struct {
-	platform     platform.Platform
-	configRepo   config.ConfigRepository
-	jdkService   *jdk.JDKService
-	provider     provider.JDKProvider
-	downloader   *downloader.Downloader
-	extractor    *downloader.Extractor
-	force        bool
-	onlyLTS      bool
-	majorVersion int
+	platform       platform.Platform
+	configRepo     config.ConfigRepository
+	jdkService     *jdk.JDKService
+	jdkProvider    provider.JDKProvider
+	gradleProvider provider.GradleProvider
+	downloader     *downloader.Downloader
+	extractor      *downloader.Extractor
+	force          bool
+	onlyLTS        bool
+	majorVersion   int
 }
 
 // NewInstallCommand creates a new InstallCommand
@@ -37,8 +38,8 @@ func NewInstallCommand(platform platform.Platform, configRepo config.ConfigRepos
 	}
 }
 
-// Execute runs the install command
-func (c *InstallCommand) Execute(ctx context.Context, version string) error {
+// ExecuteJDK runs the JDK install command
+func (c *InstallCommand) ExecuteJDK(ctx context.Context, version string) error {
 	// Determine which provider to use
 	providerName := c.configRepo.GetDefaultProvider()
 	if providerName == "" {
@@ -48,7 +49,7 @@ func (c *InstallCommand) Execute(ctx context.Context, version string) error {
 	// Create the appropriate provider
 	switch providerName {
 	case "temurin":
-		c.provider = provider.NewTemurinProvider()
+		c.jdkProvider = provider.NewTemurinProvider()
 	default:
 		return fmt.Errorf("unknown provider: %s", providerName)
 	}
@@ -58,12 +59,12 @@ func (c *InstallCommand) Execute(ctx context.Context, version string) error {
 	var err error
 
 	if c.onlyLTS {
-		release, err = c.provider.GetLatestLTS(ctx)
+		release, err = c.jdkProvider.GetLatestLTS(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to get latest LTS: %w", err)
 		}
 	} else if c.majorVersion > 0 {
-		release, err = c.provider.GetLatest(ctx, c.majorVersion)
+		release, err = c.jdkProvider.GetLatest(ctx, c.majorVersion)
 		if err != nil {
 			return fmt.Errorf("failed to get latest version: %w", err)
 		}
@@ -105,17 +106,73 @@ func (c *InstallCommand) Execute(ctx context.Context, version string) error {
 	return nil
 }
 
+// ExecuteGradle runs the Gradle install command
+func (c *InstallCommand) ExecuteGradle(ctx context.Context, version string) error {
+	// Use the default Gradle provider (currently only "gradle" is supported)
+	providerName := "gradle"
+
+	// Create the appropriate provider
+	switch providerName {
+	case "gradle":
+		c.gradleProvider = provider.NewGradleProvider()
+	default:
+		return fmt.Errorf("unknown Gradle provider: %s", providerName)
+	}
+
+	// Determine the version to install
+	var release *provider.GradleRelease
+	var err error
+
+	if version == "latest" {
+		release, err = c.gradleProvider.GetLatest(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to get latest Gradle: %w", err)
+		}
+	} else {
+		release, err = c.gradleProvider.GetVersion(ctx, version)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Download the Gradle
+	if err := c.downloadGradle(ctx, release); err != nil {
+		return err
+	}
+
+	// Extract the Gradle
+	if err := c.extractGradle(ctx, release); err != nil {
+		return err
+	}
+
+	// Register the Gradle in config
+	if err := c.registerGradle(ctx, release); err != nil {
+		return err
+	}
+
+	fmt.Printf("✓ Successfully installed Gradle %s\n", release.Version)
+
+	// Optionally set as current
+	if !c.force {
+		if err := c.setGradleAsCurrent(ctx, release.Version); err != nil {
+			return fmt.Errorf("failed to set Gradle as current: %w", err)
+		}
+	}
+
+	return nil
+}
+
 // findRelease finds a release matching the version string
 func (c *InstallCommand) findRelease(ctx context.Context, version string) (*provider.JDKRelease, error) {
 	// Parse major version from version string
 	major := c.parseMajorVersion(version)
 
 	if major > 0 {
-		return c.provider.GetLatest(ctx, major)
+		return c.jdkProvider.GetLatest(ctx, major)
 	}
 
 	// Try to find exact version
-	releases, err := c.provider.ListAvailable(ctx, provider.ListOptions{})
+	releases, err := c.jdkProvider.ListAvailable(ctx, provider.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -173,6 +230,32 @@ func (c *InstallCommand) downloadJDK(ctx context.Context, release *provider.JDKR
 	return nil
 }
 
+// downloadGradle downloads the Gradle
+func (c *InstallCommand) downloadGradle(ctx context.Context, release *provider.GradleRelease) error {
+	homeDir := c.platform.HomeDir()
+	jemDir := filepath.Join(homeDir, ".jem")
+	gradleDir := filepath.Join(jemDir, "gradles")
+
+	// Create Gradle directory if needed
+	if err := c.platform.CreateLink(gradleDir, gradleDir); err != nil && !os.IsExist(err) {
+		return fmt.Errorf("failed to create Gradle directory: %w", err)
+	}
+
+	// Determine archive filename
+	archiveName := filepath.Base(release.URL)
+	archivePath := filepath.Join(gradleDir, archiveName)
+
+	// Download with progress
+	fmt.Printf("Downloading Gradle %s...\n", release.Version)
+	fmt.Printf("URL: %s\n", release.URL)
+
+	if err := c.downloader.DownloadWithChecksum(ctx, release.URL, archivePath, release.Checksum, c.progressCallback); err != nil {
+		return fmt.Errorf("download failed: %w", err)
+	}
+
+	return nil
+}
+
 // extractJDK extracts the downloaded archive
 func (c *InstallCommand) extractJDK(ctx context.Context, release *provider.JDKRelease) error {
 	homeDir := c.platform.HomeDir()
@@ -198,6 +281,31 @@ func (c *InstallCommand) extractJDK(ctx context.Context, release *provider.JDKRe
 	return nil
 }
 
+// extractGradle extracts the downloaded archive
+func (c *InstallCommand) extractGradle(ctx context.Context, release *provider.GradleRelease) error {
+	homeDir := c.platform.HomeDir()
+	jemDir := filepath.Join(homeDir, ".jem")
+	gradleDir := filepath.Join(jemDir, "gradles")
+
+	// Determine archive filename
+	archiveName := filepath.Base(release.URL)
+	archivePath := filepath.Join(gradleDir, archiveName)
+
+	// Extract directory name
+	extractDir := filepath.Join(gradleDir, release.Version)
+
+	fmt.Printf("Extracting Gradle to %s...\n", extractDir)
+
+	if err := c.extractor.Extract(archivePath, extractDir); err != nil {
+		return fmt.Errorf("extraction failed: %w", err)
+	}
+
+	// Remove archive after extraction
+	os.Remove(archivePath)
+
+	return nil
+}
+
 // registerJDK registers the installed JDK in the config
 func (c *InstallCommand) registerJDK(ctx context.Context, release *provider.JDKRelease) error {
 	homeDir := c.platform.HomeDir()
@@ -208,13 +316,34 @@ func (c *InstallCommand) registerJDK(ctx context.Context, release *provider.JDKR
 	jdkInfo := config.JDKInfo{
 		Path:     jdkPath,
 		Version:  release.Version,
-		Provider: c.provider.Name(),
+		Provider: c.jdkProvider.Name(),
 		Managed:  true,
 	}
 
 	// Add to installed JDKs
 	if err := c.configRepo.AddInstalledJDK(jdkInfo); err != nil {
 		return fmt.Errorf("failed to register JDK: %w", err)
+	}
+
+	return nil
+}
+
+// registerGradle registers the installed Gradle in the config
+func (c *InstallCommand) registerGradle(ctx context.Context, release *provider.GradleRelease) error {
+	homeDir := c.platform.HomeDir()
+	jemDir := filepath.Join(homeDir, ".jem")
+	gradlePath := filepath.Join(jemDir, "gradles", release.Version)
+
+	// Create Gradle info
+	gradleInfo := config.GradleInfo{
+		Path:    gradlePath,
+		Version: release.Version,
+		Managed: true,
+	}
+
+	// Add to installed Gradles
+	if err := c.configRepo.AddInstalledGradle(gradleInfo); err != nil {
+		return fmt.Errorf("failed to register Gradle: %w", err)
 	}
 
 	return nil
@@ -233,6 +362,31 @@ func (c *InstallCommand) setAsCurrent(ctx context.Context, version string) error
 	}
 
 	fmt.Printf("✓ Set JDK %s as current\n", version)
+	return nil
+}
+
+// setGradleAsCurrent sets the installed Gradle as the current version
+func (c *InstallCommand) setGradleAsCurrent(ctx context.Context, version string) error {
+	if err := c.configRepo.SetGradleCurrent(version); err != nil {
+		return fmt.Errorf("failed to set current Gradle: %w", err)
+	}
+
+	// Update symlink
+	gradlePath := filepath.Join(c.platform.HomeDir(), ".jem", "gradles", version)
+	currentLink := filepath.Join(filepath.Dir(gradlePath), "current")
+
+	// Remove existing symlink if it exists
+	if _, err := os.Lstat(currentLink); err == nil {
+		if err := os.Remove(currentLink); err != nil {
+			return fmt.Errorf("failed to remove existing current symlink: %w", err)
+		}
+	}
+
+	if err := c.platform.CreateLink(gradlePath, currentLink); err != nil {
+		return fmt.Errorf("failed to create current symlink: %w", err)
+	}
+
+	fmt.Printf("✓ Set Gradle %s as current\n", version)
 	return nil
 }
 

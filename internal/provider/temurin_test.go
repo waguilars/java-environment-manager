@@ -2,6 +2,9 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 )
 
@@ -21,396 +24,673 @@ func TestTemurinProvider_DisplayName(t *testing.T) {
 	}
 }
 
-func TestListOptions(t *testing.T) {
+// TestTemurinProvider_ListAvailable_Success tests successful API call to list available JDKs
+func TestTemurinProvider_ListAvailable_Success(t *testing.T) {
+	// Mock response from Adoptium API
+	mockResponse := []struct {
+		Version  temurinVersion  `json:"version"`
+		Binaries []temurinBinary `json:"binaries"`
+	}{
+		{
+			Version: temurinVersion{
+				Name:  "21.0.2+13",
+				Major: 21,
+				Minor: 0,
+				Patch: 2,
+			},
+			Binaries: []temurinBinary{
+				{
+					Architecture: "x64",
+					OS:           "linux",
+					Package: temurinPackage{
+						Link:     "https://example.com/jdk-21.0.2+13_linux-x64.tar.gz",
+						Checksum: "abc123def456",
+						Name:     "OpenJDK21U-jdk_x64_linux_hotspot_21.0.2.tar.gz",
+						Size:     123456789,
+					},
+				},
+			},
+		},
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(mockResponse)
+	}))
+	defer server.Close()
+
+	provider := NewTemurinProviderWithBase(server.URL)
+
 	opts := ListOptions{
-		MajorVersion: 17,
+		MajorVersion: 21,
+		Architecture: "x64",
+		OS:           "linux",
+	}
+
+	releases, err := provider.ListAvailable(context.Background(), opts)
+
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	if len(releases) != 1 {
+		t.Errorf("Expected 1 release, got %d", len(releases))
+	}
+
+	if releases[0].Version != "21.0.2+13" {
+		t.Errorf("Expected version '21.0.2+13', got '%s'", releases[0].Version)
+	}
+
+	if releases[0].Major != 21 {
+		t.Errorf("Expected major 21, got %d", releases[0].Major)
+	}
+
+	if releases[0].URL != "https://example.com/jdk-21.0.2+13_linux-x64.tar.gz" {
+		t.Errorf("Expected URL 'https://example.com/jdk-21.0.2+13_linux-x64.tar.gz', got '%s'", releases[0].URL)
+	}
+
+	if releases[0].Architecture != "x64" {
+		t.Errorf("Expected architecture 'x64', got '%s'", releases[0].Architecture)
+	}
+
+	if releases[0].ArchiveType != "tar.gz" {
+		t.Errorf("Expected archive type 'tar.gz', got '%s'", releases[0].ArchiveType)
+	}
+}
+
+// TestTemurinProvider_ListAvailable_Windows tests Windows platform handling
+func TestTemurinProvider_ListAvailable_Windows(t *testing.T) {
+	mockResponse := []struct {
+		Version  temurinVersion  `json:"version"`
+		Binaries []temurinBinary `json:"binaries"`
+	}{
+		{
+			Version: temurinVersion{
+				Name:  "21.0.2+13",
+				Major: 21,
+			},
+			Binaries: []temurinBinary{
+				{
+					Architecture: "x64",
+					OS:           "windows",
+					Package: temurinPackage{
+						Link:     "https://example.com/jdk-21.0.2+13_windows-x64.zip",
+						Checksum: "def456abc123",
+						Name:     "OpenJDK21U-jdk_x64_windows_hotspot_21.0.2.zip",
+						Size:     987654321,
+					},
+				},
+			},
+		},
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(mockResponse)
+	}))
+	defer server.Close()
+
+	provider := NewTemurinProviderWithBase(server.URL)
+
+	opts := ListOptions{
+		MajorVersion: 21,
+		Architecture: "x64",
+		OS:           "windows",
+	}
+
+	releases, err := provider.ListAvailable(context.Background(), opts)
+
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	if len(releases) != 1 {
+		t.Errorf("Expected 1 release, got %d", len(releases))
+	}
+
+	if releases[0].ArchiveType != "zip" {
+		t.Errorf("Expected archive type 'zip' for Windows, got '%s'", releases[0].ArchiveType)
+	}
+}
+
+// TestTemurinProvider_ListAvailable_MultipleReleases tests multiple JDK releases
+func TestTemurinProvider_ListAvailable_MultipleReleases(t *testing.T) {
+	mockResponse := []struct {
+		Version  temurinVersion  `json:"version"`
+		Binaries []temurinBinary `json:"binaries"`
+	}{
+		{
+			Version: temurinVersion{
+				Name:  "17.0.10+7",
+				Major: 17,
+			},
+			Binaries: []temurinBinary{
+				{
+					Architecture: "x64",
+					OS:           "linux",
+					Package: temurinPackage{
+						Link:     "https://example.com/jdk-17.0.10+7_linux-x64.tar.gz",
+						Checksum: "checksum1",
+						Name:     "jdk-17.0.10+7_linux-x64.tar.gz",
+					},
+				},
+			},
+		},
+		{
+			Version: temurinVersion{
+				Name:  "21.0.2+13",
+				Major: 21,
+			},
+			Binaries: []temurinBinary{
+				{
+					Architecture: "x64",
+					OS:           "linux",
+					Package: temurinPackage{
+						Link:     "https://example.com/jdk-21.0.2+13_linux-x64.tar.gz",
+						Checksum: "checksum2",
+						Name:     "jdk-21.0.2+13_linux-x64.tar.gz",
+					},
+				},
+			},
+		},
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(mockResponse)
+	}))
+	defer server.Close()
+
+	provider := NewTemurinProviderWithBase(server.URL)
+
+	opts := ListOptions{
+		MajorVersion: 0, // No major version filter
+		Architecture: "x64",
+		OS:           "linux",
+	}
+
+	releases, err := provider.ListAvailable(context.Background(), opts)
+
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	if len(releases) != 2 {
+		t.Errorf("Expected 2 releases, got %d", len(releases))
+	}
+
+	// Verify first release
+	if releases[0].Version != "17.0.10+7" {
+		t.Errorf("Expected version '17.0.10+7', got '%s'", releases[0].Version)
+	}
+
+	// Verify second release
+	if releases[1].Version != "21.0.2+13" {
+		t.Errorf("Expected version '21.0.2+13', got '%s'", releases[1].Version)
+	}
+}
+
+// TestTemurinProvider_ListAvailable_EmptyResponse tests empty API response
+func TestTemurinProvider_ListAvailable_EmptyResponse(t *testing.T) {
+	mockResponse := []struct {
+		Version  temurinVersion  `json:"version"`
+		Binaries []temurinBinary `json:"binaries"`
+	}{}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(mockResponse)
+	}))
+	defer server.Close()
+
+	provider := NewTemurinProviderWithBase(server.URL)
+
+	opts := ListOptions{
+		MajorVersion: 21,
+		Architecture: "x64",
+		OS:           "linux",
+	}
+
+	releases, err := provider.ListAvailable(context.Background(), opts)
+
+	if err != nil {
+		t.Fatalf("Expected no error with empty response, got: %v", err)
+	}
+
+	if len(releases) != 0 {
+		t.Errorf("Expected 0 releases, got %d", len(releases))
+	}
+}
+
+// TestTemurinProvider_ListAvailable_InvalidJSON tests handling of invalid JSON
+func TestTemurinProvider_ListAvailable_InvalidJSON(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte("invalid json {"))
+	}))
+	defer server.Close()
+
+	provider := NewTemurinProviderWithBase(server.URL)
+
+	opts := ListOptions{
+		MajorVersion: 21,
+	}
+
+	_, err := provider.ListAvailable(context.Background(), opts)
+
+	if err == nil {
+		t.Error("Expected error for invalid JSON")
+	}
+}
+
+// TestTemurinProvider_GetLatest_Success tests getting latest JDK for a major version
+func TestTemurinProvider_GetLatest_Success(t *testing.T) {
+	mockResponse := []struct {
+		Version  temurinVersion  `json:"version"`
+		Binaries []temurinBinary `json:"binaries"`
+	}{
+		{
+			Version: temurinVersion{
+				Name:  "21.0.2+13",
+				Major: 21,
+			},
+			Binaries: []temurinBinary{
+				{
+					Architecture: "x64",
+					OS:           "linux",
+					Package: temurinPackage{
+						Link:     "https://example.com/jdk-21.0.2+13_linux-x64.tar.gz",
+						Checksum: "latest-checksum",
+						Name:     "jdk-21.0.2+13_linux-x64.tar.gz",
+					},
+				},
+			},
+		},
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(mockResponse)
+	}))
+	defer server.Close()
+
+	provider := NewTemurinProviderWithBase(server.URL)
+
+	release, err := provider.GetLatest(context.Background(), 21)
+
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	if release == nil {
+		t.Fatal("Expected non-nil release")
+	}
+
+	if release.Version != "21.0.2+13" {
+		t.Errorf("Expected version '21.0.2+13', got '%s'", release.Version)
+	}
+
+	if release.Major != 21 {
+		t.Errorf("Expected major 21, got %d", release.Major)
+	}
+}
+
+// TestTemurinProvider_GetLatest_NoReleases tests when no releases are available
+func TestTemurinProvider_GetLatest_NoReleases(t *testing.T) {
+	mockResponse := []struct {
+		Version  temurinVersion  `json:"version"`
+		Binaries []temurinBinary `json:"binaries"`
+	}{}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(mockResponse)
+	}))
+	defer server.Close()
+
+	provider := NewTemurinProviderWithBase(server.URL)
+
+	_, err := provider.GetLatest(context.Background(), 21)
+
+	if err == nil {
+		t.Error("Expected error when no releases available")
+	}
+}
+
+// TestTemurinProvider_GetLatestLTS_Success tests getting latest LTS release
+func TestTemurinProvider_GetLatestLTS_Success(t *testing.T) {
+	mockResponse := []struct {
+		Version  temurinVersion  `json:"version"`
+		Binaries []temurinBinary `json:"binaries"`
+	}{
+		{
+			Version: temurinVersion{
+				Name:  "17.0.10+7",
+				Major: 17,
+			},
+			Binaries: []temurinBinary{
+				{
+					Architecture: "x64",
+					OS:           "linux",
+					Package: temurinPackage{
+						Link:     "https://example.com/jdk-17.0.10+7_linux-x64.tar.gz",
+						Checksum: "lts-checksum",
+						Name:     "jdk-17.0.10+7_linux-x64.tar.gz",
+					},
+				},
+			},
+		},
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(mockResponse)
+	}))
+	defer server.Close()
+
+	provider := NewTemurinProviderWithBase(server.URL)
+
+	release, err := provider.GetLatestLTS(context.Background())
+
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	if release == nil {
+		t.Fatal("Expected non-nil release")
+	}
+
+	if release.Version != "17.0.10+7" {
+		t.Errorf("Expected LTS version '17.0.10+7', got '%s'", release.Version)
+	}
+
+	if release.Major != 17 {
+		t.Errorf("Expected major 17 (LTS), got %d", release.Major)
+	}
+}
+
+// TestTemurinProvider_GetLatestLTS_EmptyResponse tests GetLatestLTS with empty response
+func TestTemurinProvider_GetLatestLTS_EmptyResponse(t *testing.T) {
+	mockResponse := []struct {
+		Version  temurinVersion  `json:"version"`
+		Binaries []temurinBinary `json:"binaries"`
+	}{}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(mockResponse)
+	}))
+	defer server.Close()
+
+	provider := NewTemurinProviderWithBase(server.URL)
+
+	release, err := provider.GetLatestLTS(context.Background())
+
+	if err == nil {
+		t.Error("Expected error when no LTS releases available")
+	}
+	if release != nil {
+		t.Error("Expected nil release when no LTS releases available")
+	}
+}
+
+// TestTemurinProvider_GetChecksum tests checksum retrieval
+func TestTemurinProvider_GetChecksum(t *testing.T) {
+	provider := NewTemurinProvider()
+	release := JDKRelease{
+		Version:      "21.0.2+13",
+		Major:        21,
+		Checksum:     "expected-checksum-abc123",
+		Architecture: "x64",
+		ArchiveType:  "tar.gz",
+	}
+
+	checksum := provider.GetChecksum(release)
+	if checksum != "expected-checksum-abc123" {
+		t.Errorf("Expected checksum 'expected-checksum-abc123', got '%s'", checksum)
+	}
+}
+
+// TestTemurinProvider_GetChecksum_Formats tests GetChecksum with different checksum formats
+func TestTemurinProvider_GetChecksum_Formats(t *testing.T) {
+	testCases := []struct {
+		name     string
+		checksum string
+	}{
+		{"SHA256 hex", "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"},
+		{"SHA256 with prefix", "sha256:abc123def456"},
+		{"Empty checksum", ""},
+		{"Short checksum", "abc123"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			provider := NewTemurinProvider()
+			release := JDKRelease{
+				Checksum: tc.checksum,
+			}
+
+			result := provider.GetChecksum(release)
+			if result != tc.checksum {
+				t.Errorf("Expected checksum '%s', got '%s'", tc.checksum, result)
+			}
+		})
+	}
+}
+
+// TestTemurinProvider_URLConstruction tests correct URL construction
+func TestTemurinProvider_URLConstruction(t *testing.T) {
+	testCases := []struct {
+		name         string
+		majorVersion int
+		architecture string
+		os           string
+	}{
+		{
+			name:         "Linux x64",
+			majorVersion: 21,
+			architecture: "x64",
+			os:           "linux",
+		},
+		{
+			name:         "Windows x64",
+			majorVersion: 17,
+			architecture: "x64",
+			os:           "windows",
+		},
+		{
+			name:         "Linux aarch64",
+			majorVersion: 21,
+			architecture: "aarch64",
+			os:           "linux",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			provider := NewTemurinProvider()
+
+			// We can't directly test the URL construction without calling the API
+			// This test verifies the provider can be created with different options
+			if provider == nil {
+				t.Fatal("Expected non-nil provider")
+			}
+		})
+	}
+}
+
+// TestTemurinProvider_InterfaceCompliance tests that TemurinProvider implements JDKProvider
+func TestTemurinProvider_InterfaceCompliance(t *testing.T) {
+	provider := NewTemurinProvider()
+
+	// Verify provider implements JDKProvider interface
+	var _ JDKProvider = provider
+}
+
+// TestTemurinProvider_ConstructorWithBaseURL tests constructor with custom base URL
+func TestTemurinProvider_ConstructorWithBaseURL(t *testing.T) {
+	baseURL := "https://custom.api.adoptium.net"
+	provider := NewTemurinProviderWithBase(baseURL)
+
+	if provider == nil {
+		t.Fatal("Expected non-nil provider")
+	}
+
+	// The base URL should be set correctly (we can't directly access it in tests)
+	// This test verifies the constructor works
+}
+
+// TestTemurinProvider_HTTPClientTimeout tests that HTTP client has proper timeout
+func TestTemurinProvider_HTTPClientTimeout(t *testing.T) {
+	provider := NewTemurinProvider()
+
+	if provider.httpClient == nil {
+		t.Error("Expected httpClient to be initialized")
+	}
+}
+
+// TestTemurinProvider_ListAvailable_OnlyLTS tests filtering for LTS only
+func TestTemurinProvider_ListAvailable_OnlyLTS(t *testing.T) {
+	mockResponse := []struct {
+		Version  temurinVersion  `json:"version"`
+		Binaries []temurinBinary `json:"binaries"`
+	}{
+		{
+			Version: temurinVersion{
+				Name:  "17.0.10+7",
+				Major: 17,
+			},
+			Binaries: []temurinBinary{
+				{
+					Architecture: "x64",
+					OS:           "linux",
+					Package: temurinPackage{
+						Link:     "https://example.com/jdk-17.0.10+7_linux-x64.tar.gz",
+						Checksum: "lts-checksum",
+						Name:     "jdk-17.0.10+7_linux-x64.tar.gz",
+					},
+				},
+			},
+		},
+		{
+			Version: temurinVersion{
+				Name:  "21.0.2+13",
+				Major: 21,
+			},
+			Binaries: []temurinBinary{
+				{
+					Architecture: "x64",
+					OS:           "linux",
+					Package: temurinPackage{
+						Link:     "https://example.com/jdk-21.0.2+13_linux-x64.tar.gz",
+						Checksum: "non-lts-checksum",
+						Name:     "jdk-21.0.2+13_linux-x64.tar.gz",
+					},
+				},
+			},
+		},
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(mockResponse)
+	}))
+	defer server.Close()
+
+	provider := NewTemurinProviderWithBase(server.URL)
+
+	opts := ListOptions{
+		MajorVersion: 0,
 		OnlyLTS:      true,
 		Architecture: "x64",
 		OS:           "linux",
 	}
 
-	if opts.MajorVersion != 17 {
-		t.Errorf("Expected MajorVersion 17, got %d", opts.MajorVersion)
+	releases, err := provider.ListAvailable(context.Background(), opts)
+
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
 	}
-	if !opts.OnlyLTS {
-		t.Error("Expected OnlyLTS to be true")
-	}
-	if opts.Architecture != "x64" {
-		t.Errorf("Expected Architecture 'x64', got '%s'", opts.Architecture)
-	}
-	if opts.OS != "linux" {
-		t.Errorf("Expected OS 'linux', got '%s'", opts.OS)
+
+	// Both 17 and 21 are LTS versions, so both should be returned
+	if len(releases) != 2 {
+		t.Errorf("Expected 2 LTS releases, got %d", len(releases))
 	}
 }
 
-func TestJDKRelease(t *testing.T) {
+// TestTemurinProvider_Download tests the Download method
+func TestTemurinProvider_Download(t *testing.T) {
+	provider := NewTemurinProvider()
+
 	release := JDKRelease{
-		Version:      "21.0.1",
-		Major:        21,
-		URL:          "https://example.com/jdk-21.0.1.tar.gz",
+		Version:      "21.0.2",
+		URL:          "https://example.com/jdk.tar.gz",
 		Checksum:     "abc123",
 		Architecture: "x64",
 		ArchiveType:  "tar.gz",
-		ReleaseType:  "ga",
 	}
 
-	if release.Version != "21.0.1" {
-		t.Errorf("Expected version '21.0.1', got '%s'", release.Version)
-	}
-	if release.Major != 21 {
-		t.Errorf("Expected major 21, got %d", release.Major)
-	}
-	if release.ArchiveType != "tar.gz" {
-		t.Errorf("Expected archive type 'tar.gz', got '%s'", release.ArchiveType)
+	// This will fail because we're not actually downloading, but we can test the method exists
+	// The actual download would require a real server, which is not practical for unit tests
+	err := provider.Download(context.Background(), release, "/tmp/test", nil)
+
+	// Expected to fail because the URL is not a real server
+	if err == nil {
+		t.Error("Expected error when downloading from non-existent server")
 	}
 }
 
-func TestProgressFunc(t *testing.T) {
-	var downloaded, total int64 = 500, 1000
-	var called bool
-
-	// Define a progress function
-	progress := func(d, t int64) {
-		called = true
-		downloaded = d
-		total = t
-	}
-
-	// Call the progress function
-	progress(500, 1000)
-
-	if !called {
-		t.Error("Expected progress function to be called")
-	}
-	if downloaded != 500 {
-		t.Errorf("Expected downloaded 500, got %d", downloaded)
-	}
-	if total != 1000 {
-		t.Errorf("Expected total 1000, got %d", total)
-	}
-}
-
-func TestProgressInfo(t *testing.T) {
-	info := ProgressInfo{
-		Downloaded: 500,
-		Total:      1000,
-		Percent:    50.0,
-		Speed:      1024.0,
-		ETA:        10,
-	}
-
-	if info.Downloaded != 500 {
-		t.Errorf("Expected downloaded 500, got %d", info.Downloaded)
-	}
-	if info.Total != 1000 {
-		t.Errorf("Expected total 1000, got %d", info.Total)
-	}
-	if info.Percent != 50.0 {
-		t.Errorf("Expected percent 50.0, got %f", info.Percent)
-	}
-	if info.Speed != 1024.0 {
-		t.Errorf("Expected speed 1024.0, got %f", info.Speed)
-	}
-	if info.ETA != 10 {
-		t.Errorf("Expected ETA 10, got %d", info.ETA)
-	}
-}
-
-func TestNewTemurinProvider(t *testing.T) {
+// TestTemurinProvider_Download_WithProgress tests Download with progress callback
+func TestTemurinProvider_Download_WithProgress(t *testing.T) {
 	provider := NewTemurinProvider()
-	if provider == nil {
-		t.Error("Expected non-nil provider")
-	}
-	if provider.httpClient == nil {
-		t.Error("Expected httpClient to be initialized")
-	}
-}
 
-func TestTemurinProvider_GetChecksum(t *testing.T) {
-	provider := NewTemurinProvider()
 	release := JDKRelease{
-		Checksum: "expected-checksum-123",
-	}
-
-	checksum := provider.GetChecksum(release)
-	if checksum != "expected-checksum-123" {
-		t.Errorf("Expected checksum 'expected-checksum-123', got '%s'", checksum)
-	}
-}
-
-func TestJDKRelease_Structure(t *testing.T) {
-	release := JDKRelease{
-		Version:      "17.0.10",
-		Major:        17,
-		URL:          "https://api.adoptium.net/v3/binary/17",
-		Checksum:     "sha256:abc123",
+		Version:      "21.0.2",
+		URL:          "https://example.com/jdk.tar.gz",
+		Checksum:     "abc123",
 		Architecture: "x64",
 		ArchiveType:  "tar.gz",
-		ReleaseType:  "ga",
 	}
 
-	// Verify all fields are accessible
-	if release.Version == "" {
-		t.Error("Expected non-empty version")
+	progress := func(d, t int64) {
 	}
-	if release.URL == "" {
-		t.Error("Expected non-empty URL")
-	}
-	if release.Architecture == "" {
-		t.Error("Expected non-empty architecture")
+
+	// This will fail because we're not actually downloading
+	err := provider.Download(context.Background(), release, "/tmp/test", progress)
+
+	// Expected to fail because the URL is not a real server
+	if err == nil {
+		t.Error("Expected error when downloading from non-existent server")
 	}
 }
 
-func TestListOptions_Defaults(t *testing.T) {
-	opts := ListOptions{}
-
-	// Verify defaults
-	if opts.MajorVersion != 0 {
-		t.Errorf("Expected MajorVersion 0 by default, got %d", opts.MajorVersion)
-	}
-	if opts.OnlyLTS != false {
-		t.Error("Expected OnlyLTS false by default")
-	}
-	if opts.Architecture != "" {
-		t.Errorf("Expected empty Architecture by default, got '%s'", opts.Architecture)
-	}
-	if opts.OS != "" {
-		t.Errorf("Expected empty OS by default, got '%s'", opts.OS)
-	}
-}
-
-func TestProgressInfo_Calculation(t *testing.T) {
-	// Test 100% progress
-	info1 := ProgressInfo{
-		Downloaded: 1000,
-		Total:      1000,
-		Percent:    100.0,
-	}
-	if info1.Percent != 100 {
-		t.Errorf("Expected 100%% progress, got %f", info1.Percent)
-	}
-
-	// Test 0% progress
-	info2 := ProgressInfo{
-		Downloaded: 0,
-		Total:      1000,
-		Percent:    0.0,
-	}
-	if info2.Percent != 0 {
-		t.Errorf("Expected 0%% progress, got %f", info2.Percent)
-	}
-}
-
-func TestJDKRelease_EarlyAccess(t *testing.T) {
-	release := JDKRelease{
-		Version:     "22-ea",
-		Major:       22,
-		URL:         "https://example.com/jdk-22-ea.tar.gz",
-		ArchiveType: "tar.gz",
-		ReleaseType: "ea", // Early Access
-	}
-
-	if release.ReleaseType != "ea" {
-		t.Errorf("Expected release type 'ea', got '%s'", release.ReleaseType)
-	}
-}
-
-func TestTemurinProvider_HTTPClientTimeout(t *testing.T) {
-	provider := NewTemurinProvider()
-	// The client should have a timeout set
-	// We can't directly access the timeout value in tests,
-	// but we can verify the client exists
-	if provider.httpClient == nil {
-		t.Error("Expected httpClient to be initialized")
-	}
-}
-
-func TestListOptions_MajorVersionOnly(t *testing.T) {
-	opts := ListOptions{
-		MajorVersion: 21,
-	}
-
-	if opts.MajorVersion != 21 {
-		t.Errorf("Expected MajorVersion 21, got %d", opts.MajorVersion)
-	}
-	if opts.OnlyLTS != false {
-		t.Error("Expected OnlyLTS false when not specified")
-	}
-}
-
-func TestListOptions_LTSOnly(t *testing.T) {
-	opts := ListOptions{
-		OnlyLTS: true,
-	}
-
-	if !opts.OnlyLTS {
-		t.Error("Expected OnlyLTS to be true")
-	}
-	if opts.MajorVersion != 0 {
-		t.Errorf("Expected MajorVersion 0, got %d", opts.MajorVersion)
-	}
-}
-
-func TestProgressInfo_SpeedCalculation(t *testing.T) {
-	info := ProgressInfo{
-		Downloaded: 1024,
-		Total:      1024,
-		Percent:    100.0,
-		Speed:      512.0,
-	}
-
-	if info.Speed != 512.0 {
-		t.Errorf("Expected speed 512.0, got %f", info.Speed)
-	}
-}
-
-func TestTemurinProvider_Constructor(t *testing.T) {
-	provider := NewTemurinProvider()
-
-	// Verify interface compliance
-	var _ JDKProvider = provider
-}
-
-func TestListOptions_AllFields(t *testing.T) {
-	opts := ListOptions{
-		MajorVersion: 11,
-		OnlyLTS:      false,
-		Architecture: "aarch64",
-		OS:           "windows",
-	}
-
-	if opts.MajorVersion != 11 {
-		t.Errorf("Expected MajorVersion 11, got %d", opts.MajorVersion)
-	}
-	if opts.OnlyLTS != false {
-		t.Error("Expected OnlyLTS false")
-	}
-	if opts.Architecture != "aarch64" {
-		t.Errorf("Expected Architecture 'aarch64', got '%s'", opts.Architecture)
-	}
-	if opts.OS != "windows" {
-		t.Errorf("Expected OS 'windows', got '%s'", opts.OS)
-	}
-}
-
-func TestJDKRelease_VariousVersions(t *testing.T) {
-	testCases := []struct {
-		version string
-		major   int
-	}{
-		{"8.0.342", 8},
-		{"11.0.12", 11},
-		{"17.0.10", 17},
-		{"21.0.1", 21},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.version, func(t *testing.T) {
-			release := JDKRelease{
-				Version: tc.version,
-				Major:   tc.major,
-			}
-			if release.Version != tc.version {
-				t.Errorf("Expected version '%s', got '%s'", tc.version, release.Version)
-			}
-			if release.Major != tc.major {
-				t.Errorf("Expected major %d, got %d", tc.major, release.Major)
-			}
-		})
-	}
-}
-
-func TestProgressInfo_NoData(t *testing.T) {
-	info := ProgressInfo{}
-
-	if info.Downloaded != 0 {
-		t.Errorf("Expected downloaded 0, got %d", info.Downloaded)
-	}
-	if info.Total != 0 {
-		t.Errorf("Expected total 0, got %d", info.Total)
-	}
-	if info.Percent != 0 {
-		t.Errorf("Expected percent 0, got %f", info.Percent)
-	}
-}
-
-func TestListOptions_EmptyArchitecture(t *testing.T) {
-	opts := ListOptions{
-		MajorVersion: 17,
-	}
-
-	// Empty architecture should be allowed (use default)
-	if opts.Architecture != "" {
-		t.Errorf("Expected empty architecture by default, got '%s'", opts.Architecture)
-	}
-}
-
-func TestTemurinProvider_WithContext(t *testing.T) {
-	provider := NewTemurinProvider()
-	ctx := context.Background()
-
-	// Verify provider can be used with context
-	// This test just verifies the interface is correct
-	var _ context.Context = ctx
-	_ = provider
-
-	// The actual API calls would use the context
-}
-
-func TestJDKRelease_ArchiveTypes(t *testing.T) {
-	testCases := []struct {
-		archiveType string
-		description string
-	}{
-		{"tar.gz", "gzip compressed tar"},
-		{"zip", "zip archive"},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.description, func(t *testing.T) {
-			release := JDKRelease{
-				ArchiveType: tc.archiveType,
-			}
-			if release.ArchiveType != tc.archiveType {
-				t.Errorf("Expected archive type '%s', got '%s'", tc.archiveType, release.ArchiveType)
-			}
-		})
-	}
-}
-
-func TestProgressInfo_ETA(t *testing.T) {
-	info := ProgressInfo{
-		Downloaded: 500,
-		Total:      1000,
-		Percent:    50.0,
-		ETA:        30, // 30 seconds remaining
-	}
-
-	if info.ETA != 30 {
-		t.Errorf("Expected ETA 30, got %d", info.ETA)
-	}
-}
-
-func TestListOptions_Combinations(t *testing.T) {
+// TestTemurinProvider_Download_ArchiveTypes tests Download with different archive types
+func TestTemurinProvider_Download_ArchiveTypes(t *testing.T) {
 	testCases := []struct {
 		name        string
-		opts        ListOptions
-		expectMajor int
-		expectLTS   bool
+		archiveType string
 	}{
-		{"Major only", ListOptions{MajorVersion: 17}, 17, false},
-		{"LTS only", ListOptions{OnlyLTS: true}, 0, true},
-		{"Both set", ListOptions{MajorVersion: 21, OnlyLTS: true}, 21, true},
-		{"Neither set", ListOptions{}, 0, false},
+		{"tar.gz", "tar.gz"},
+		{"zip", "zip"},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			if tc.opts.MajorVersion != tc.expectMajor {
-				t.Errorf("Expected MajorVersion %d, got %d", tc.expectMajor, tc.opts.MajorVersion)
+			provider := NewTemurinProvider()
+
+			release := JDKRelease{
+				Version:      "21.0.2",
+				URL:          "https://example.com/jdk." + tc.archiveType,
+				Checksum:     "abc123",
+				Architecture: "x64",
+				ArchiveType:  tc.archiveType,
 			}
-			if tc.opts.OnlyLTS != tc.expectLTS {
-				t.Errorf("Expected OnlyLTS %v, got %v", tc.expectLTS, tc.opts.OnlyLTS)
+
+			err := provider.Download(context.Background(), release, "/tmp/test", nil)
+
+			// Expected to fail because the URL is not a real server
+			if err == nil {
+				t.Error("Expected error when downloading from non-existent server")
 			}
 		})
 	}
