@@ -255,14 +255,157 @@ func TestSetup_ShellConfigBackup(t *testing.T) {
 		t.Errorf("Expected no error, got: %v", err)
 	}
 
-	// Verify backup was created
+	// Verify backup was created with original content
 	backupPath := shellConfigPath + ".jem.backup"
-	content, err := os.ReadFile(backupPath)
+	backupContent, err := os.ReadFile(backupPath)
 	if err != nil {
 		t.Errorf("Expected backup to exist, got error: %v", err)
 	}
-	if string(content) != originalContent {
+	if string(backupContent) != originalContent {
 		t.Error("Expected backup to contain original content")
+	}
+
+	// NEW: Verify shell config contains original content + jem config
+	shellConfigContent, err := os.ReadFile(shellConfigPath)
+	if err != nil {
+		t.Errorf("Expected shell config to exist, got error: %v", err)
+	}
+
+	// Verify original content is preserved
+	if !strings.Contains(string(shellConfigContent), originalContent) {
+		t.Error("Expected shell config to contain original content")
+	}
+
+	// Verify jem config is present
+	if !strings.Contains(string(shellConfigContent), ".jem/bin") {
+		t.Error("Expected shell config to contain jem configuration")
+	}
+
+	// Verify jem config appears AFTER original content
+	originalIdx := strings.Index(string(shellConfigContent), "# Existing bashrc")
+	jemIdx := strings.Index(string(shellConfigContent), "# jem configuration")
+	if originalIdx >= jemIdx {
+		t.Error("Expected jem configuration to appear after original content")
+	}
+}
+
+// TestSetup_ShellConfigBackup_NoDataLoss verifies no data loss with comprehensive content
+func TestSetup_ShellConfigBackup_NoDataLoss(t *testing.T) {
+	tmpDir := t.TempDir()
+	jemDir := filepath.Join(tmpDir, ".jem")
+	os.MkdirAll(jemDir, 0755)
+
+	configPath := filepath.Join(jemDir, "config.toml")
+	shellConfigPath := filepath.Join(tmpDir, ".bashrc")
+
+	// Create existing config
+	os.WriteFile(configPath, []byte("[general]\ndefault_provider = 'temurin'\n"), 0644)
+
+	// Create shell config with 50+ lines of diverse content
+	originalLines := []string{
+		"# ~/.bashrc: executed by bash(1) for non-login shells.",
+		"# see /usr/share/doc/bash/examples/startup-files for examples.",
+		"",
+		"# If not running interactively, don't do anything",
+		"case $- in",
+		"    *i*) ;;",
+		"      *) return;;",
+		"esac",
+		"",
+		"# don't put duplicate lines or lines starting with space in the history.",
+		"HISTCONTROL=ignoreboth",
+		"",
+		"# append to the history file, don't overwrite it",
+		"shopt -s histappend",
+		"",
+		"# for setting history length see HISTSIZE and HISTFILESIZE in bash(1)",
+		"HISTSIZE=1000",
+		"HISTFILESIZE=2000",
+		"",
+		"# aliases",
+		"alias ll='ls -alF'",
+		"alias la='ls -A'",
+		"alias l='ls -CF'",
+		"alias ..='cd ..'",
+		"alias ...='cd ../..'",
+		"",
+		"# custom functions",
+		"mkcd() {",
+		"    mkdir -p \"$1\"",
+		"    cd \"$1\"",
+		"}",
+		"",
+		"# custom exports",
+		"export EDITOR=vim",
+		"export VISUAL=vim",
+		"export PATH=\"$HOME/.local/bin:$PATH\"",
+		"",
+		"# Git prompt",
+		"parse_git_branch() {",
+		"    git branch 2> /dev/null | sed -e '/^[^*]/d' -e 's/* \\(.*\\)/ (\\1)/'",
+		"}",
+		"export PS1=\"\\u@\\h \\[\\033[32m\\]\\w\\[\\033[33m\\]\\$(parse_git_branch)\\[\\033[00m\\] $ \"",
+		"",
+		"# NVM configuration",
+		"export NVM_DIR=\"$HOME/.nvm\"",
+		"[ -s \"$NVM_DIR/nvm.sh\" ] && \\. \"$NVM_DIR/nvm.sh\"",
+		"",
+		"# Pyenv configuration",
+		"export PYENV_ROOT=\"$HOME/.pyenv\"",
+		"export PATH=\"$PYENV_ROOT/bin:$PATH\"",
+		"eval \"$(pyenv init -)\"",
+	}
+	originalContent := strings.Join(originalLines, "\n") + "\n"
+	os.WriteFile(shellConfigPath, []byte(originalContent), 0644)
+
+	repo := config.NewTOMLConfigRepository(configPath)
+
+	platform := &MockPlatformForSetup{
+		HomeDirFunc:         func() string { return tmpDir },
+		DetectShellFunc:     func() config.Shell { return config.ShellBash },
+		ShellConfigPathFunc: func(shell config.Shell) string { return shellConfigPath },
+	}
+
+	cmd := &SetupCommand{
+		platform:   platform,
+		configRepo: repo,
+	}
+
+	err := cmd.Execute(context.Background())
+	if err != nil {
+		t.Errorf("Expected no error, got: %v", err)
+	}
+
+	// Count original lines
+	originalLineCount := len(strings.Split(strings.TrimSuffix(originalContent, "\n"), "\n"))
+
+	// Read final shell config
+	finalContent, err := os.ReadFile(shellConfigPath)
+	if err != nil {
+		t.Errorf("Expected shell config to exist, got error: %v", err)
+	}
+
+	// Count final lines
+	finalLineCount := len(strings.Split(strings.TrimSuffix(string(finalContent), "\n"), "\n"))
+
+	// Verify line count increased (original + jem lines)
+	expectedAdditionalLines := 4 // jem adds 4 lines (empty + comment + 2 exports)
+	if finalLineCount != originalLineCount+expectedAdditionalLines {
+		t.Errorf("Expected %d lines, got %d", originalLineCount+expectedAdditionalLines, finalLineCount)
+	}
+
+	// Verify each original line is present
+	for _, line := range originalLines {
+		if !strings.Contains(string(finalContent), line) {
+			t.Errorf("Expected shell config to contain line: %s", line)
+		}
+	}
+
+	// Verify backup is exact copy
+	backupPath := shellConfigPath + ".jem.backup"
+	backupContent, _ := os.ReadFile(backupPath)
+	if string(backupContent) != originalContent {
+		t.Error("Expected backup to be exact copy of original")
 	}
 }
 

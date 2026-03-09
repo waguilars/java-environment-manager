@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -159,9 +160,30 @@ func (c *SetupCommand) configureShell(shell config.Shell, shellConfigPath string
 	// Create backup if file exists
 	if _, err := os.Stat(resolvedPath); err == nil {
 		backupPath := resolvedPath + ".jem.backup"
-		if err := os.Rename(resolvedPath, backupPath); err != nil {
-			return fmt.Errorf("failed to create backup: %w", err)
+
+		// Open source file for reading
+		src, err := os.Open(resolvedPath)
+		if err != nil {
+			return fmt.Errorf("failed to open shell config for backup: %w", err)
 		}
+
+		// Create backup file
+		dst, err := os.Create(backupPath)
+		if err != nil {
+			src.Close()
+			return fmt.Errorf("failed to create backup file: %w", err)
+		}
+
+		// Copy content
+		if _, err := io.Copy(dst, src); err != nil {
+			src.Close()
+			dst.Close()
+			return fmt.Errorf("failed to copy to backup: %w", err)
+		}
+
+		// Close both files
+		src.Close()
+		dst.Close()
 	}
 
 	// Create directory if it doesn't exist

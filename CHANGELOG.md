@@ -5,11 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.3.1-beta] - 2026-03-09
 
 ### Fixed
-- `jem setup` now configures shell even when config.toml already exists (was exiting early)
-- Added comprehensive test suite for setup command (14 test cases)
+- **CRITICAL**: `jem setup` no longer destroys shell config files (was using `os.Rename` instead of copy)
+- Shell config backups now properly preserve original content using `io.Copy`
+- Added comprehensive tests for shell config backup with no data loss (50+ line configs)
+- Shell config now retains all user content AND adds jem configuration
 
 ## [0.3.0-beta] - 2026-03-09
 
