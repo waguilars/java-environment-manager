@@ -6,8 +6,8 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/user/jem/internal/config"
-	"github.com/user/jem/internal/jdk"
+	"github.com/waguilars/java-environment-manager/internal/config"
+	"github.com/waguilars/java-environment-manager/internal/jdk"
 )
 
 // CurrentCommand handles the 'jem current' command

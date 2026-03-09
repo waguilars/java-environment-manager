@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/user/jem/internal/config"
+	"github.com/waguilars/java-environment-manager/internal/config"
 )
 
 func TestImportCommand_ExecuteGradle_InvalidPath(t *testing.T) {

@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/user/jem/internal/config"
+	"github.com/waguilars/java-environment-manager/internal/config"
 )
 
 // NewPlatformLinux creates the Platform implementation for Linux/Unix

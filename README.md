@@ -1,8 +1,8 @@
 # jem - Java Environment Manager
 
-[![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)](https://github.com/user/jem)
+[![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)](https://github.com/waguilars/java-environment-manager)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.2.0--beta-orange.svg)](https://github.com/user/jem)
+[![Version](https://img.shields.io/badge/version-0.3.1--beta-orange.svg)](https://github.com/waguilars/java-environment-manager)
 
 `jem` (Java Environment Manager) is a CLI tool for managing multiple JDK and Gradle versions on your local development machine. It provides a simple interface for detecting, importing, and switching between Java development environments.
 
@@ -23,20 +23,36 @@
 
 ## Installation
 
+### Using `go install` (Recommended)
+
+The easiest way to install `jem` is using Go's built-in install command:
+
+```bash
+go install github.com/waguilars/java-environment-manager/cmd/jem@latest
+```
+
+This will download, build, and install the latest version to your `$GOPATH/bin` (make sure `$GOPATH/bin` is in your `$PATH`).
+
+To install a specific version:
+
+```bash
+go install github.com/waguilars/java-environment-manager/cmd/jem@v0.3.1
+```
+
 ### From Source
 
 ```bash
-git clone https://github.com/user/jem.git
-cd jem
+git clone https://github.com/waguilars/java-environment-manager.git
+cd java-environment-manager
 
 # Build with Makefile
 make build
 
 # Or build directly
-go build -o jem
+go build -o jem ./cmd/jem
 
-# Install to /usr/local/bin
-sudo make install
+# Install to $GOPATH/bin
+go install ./cmd/jem
 ```
 
 ### Pre-built Binaries
@@ -187,7 +203,9 @@ jem/
 ├── VERSION                # Current version (SemVer 2.0.0)
 ├── CHANGELOG.md           # Version history
 ├── go.mod
-└── main.go
+└── cmd/
+    └── jem/
+        └── main.go        # Entry point for go install
 ```
 
 ## Configuration
@@ -268,23 +286,25 @@ This project follows [Semantic Versioning 2.0.0](https://semver.org/).
 
 #### Creating a Release
 
+This project uses [GoReleaser](https://goreleaser.com/) for automated releases. Releases are triggered by pushing a git tag.
+
 ```bash
-# Create a release (Linux/macOS/WSL)
-./release.sh 0.2.0-beta
-
-# Create a release (Windows PowerShell)
-.\release.ps1 -Version 0.2.0-beta
-
-# Or use Makefile
-make release version=0.2.0-beta
+# Tag a new version
+git tag -a v0.3.0 -m "Release v0.3.0"
+git push origin v0.3.0
 ```
 
-The release script will:
-1. Update version in `VERSION`, `main.go`, and `cmd/root.go`
-2. Run all tests
-3. Build binaries for all platforms
-4. Create a git tag
-5. Verify all assets
+The CI will automatically:
+1. Run all tests
+2. Build binaries for all platforms (Linux, macOS, Windows)
+3. Create a GitHub release with assets
+4. Generate checksums
+
+For local testing (without creating a release):
+```bash
+# Test the release process locally
+goreleaser release --snapshot --clean
+```
 
 See [CHANGELOG.md](CHANGELOG.md) for version history.
 

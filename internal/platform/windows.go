@@ -8,7 +8,7 @@ import (
 	"syscall"
 	"unsafe"
 
-	"github.com/user/jem/internal/config"
+	"github.com/waguilars/java-environment-manager/internal/config"
 )
 
 // WindowsPlatform implements Platform interface for Windows

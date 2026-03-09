@@ -4,7 +4,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/user/jem/internal/config"
+	"github.com/waguilars/java-environment-manager/internal/config"
 )
 
 // LinuxPlatform implements Platform interface for Linux

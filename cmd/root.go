@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
-	"github.com/user/jem/internal/menu"
+	"github.com/waguilars/java-environment-manager/internal/menu"
 )
 
 // CLIContext holds context information for CLI operations
@@ -47,7 +47,7 @@ func RootCommand() *cobra.Command {
 JDK versions on your local development machine.
 
 Supports Windows and Linux with automatic platform detection.`,
-		Version: "0.3.1-beta",
+		Version: "", // Version is injected at build time via main.Version
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
 			// Load config and validate environment
 			ctx := context.Background()

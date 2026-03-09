@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/user/jem/internal/provider"
+	"github.com/waguilars/java-environment-manager/internal/provider"
 )
 
 // DownloadStatistics tracks download statistics

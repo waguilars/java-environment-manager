@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/user/jem/internal/config"
-	"github.com/user/jem/internal/platform"
+	"github.com/waguilars/java-environment-manager/internal/config"
+	"github.com/waguilars/java-environment-manager/internal/platform"
 )
 
 // MockPlatformForSetup creates a mock platform for setup tests

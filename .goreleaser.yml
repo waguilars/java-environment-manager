@@ -1,0 +1,117 @@
+# GoReleaser configuration for jem
+# This is prepared but NOT activated - manual activation required
+# See: https://goreleaser.com
+
+version: 2
+
+project_name: jem
+
+before:
+  hooks:
+    - go mod tidy
+    - go generate ./...
+
+builds:
+  - id: jem
+    main: ./cmd/jem
+    binary: jem
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    goarm:
+      - "7"
+    ldflags:
+      - -s -w
+      - -X main.Version={{.Version}}
+    flags:
+      - -trimpath
+
+archives:
+  - id: jem
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+    format: tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - LICENSE
+      - README.md
+      - completions/*
+
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+      - '^ci:'
+      - Merge pull request
+      - Merge branch
+
+release:
+  github:
+    owner: waguilars
+    name: java-environment-manager
+  draft: true
+  prerelease: auto
+
+brews:
+  - name: jem
+    repository:
+      owner: waguilars
+      name: homebrew-tap
+    homepage: "https://github.com/waguilars/java-environment-manager"
+    description: "Java Environment Manager - Manage your JDK installations"
+    license: "MIT"
+    test: |
+      system "#{bin}/jem --version"
+
+scoops:
+  - repository:
+      owner: waguilars
+      name: scoop-bucket
+    homepage: "https://github.com/waguilars/java-environment-manager"
+    description: "Java Environment Manager - Manage your JDK installations"
+    license: MIT
+
+nfpms:
+  - id: jem
+    package_name: jem
+    vendor: Wilson Aguilar
+    homepage: https://github.com/waguilars/java-environment-manager
+    maintainer: Wilson Aguilar <waguilars@example.com>
+    description: Java Environment Manager - Manage your JDK installations
+    license: MIT
+    formats:
+      - deb
+      - rpm
+      - apk
+    dependencies:
+      - curl
+    recommends:
+      - git
+
+# NOTE: GoReleaser is NOT activated
+# To activate, create a GitHub release workflow that runs:
+#   goreleaser release --clean
+# Or for snapshots:
+#   goreleaser release --snapshot --clean

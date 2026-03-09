@@ -2,8 +2,8 @@ package mocks
 
 import (
 	"context"
-	"github.com/user/jem/internal/config"
-	"github.com/user/jem/internal/provider"
+	"github.com/waguilars/java-environment-manager/internal/config"
+	"github.com/waguilars/java-environment-manager/internal/provider"
 )
 
 // MockPlatform is a mock implementation of the Platform interface

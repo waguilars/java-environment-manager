@@ -1,6 +1,6 @@
 package platform
 
-import "github.com/user/jem/internal/config"
+import "github.com/waguilars/java-environment-manager/internal/config"
 
 // Platform interface defines the OS abstraction layer
 type Platform interface {

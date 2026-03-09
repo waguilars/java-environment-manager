@@ -7,8 +7,8 @@ import (
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
-	"github.com/user/jem/internal/config"
-	"github.com/user/jem/internal/jdk"
+	"github.com/waguilars/java-environment-manager/internal/config"
+	"github.com/waguilars/java-environment-manager/internal/jdk"
 )
 
 // ListCommand handles the 'jem list' command

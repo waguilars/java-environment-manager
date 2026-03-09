@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/user/jem/internal/config"
+	"github.com/waguilars/java-environment-manager/internal/config"
 )
 
 func TestLinuxPlatform_Name(t *testing.T) {

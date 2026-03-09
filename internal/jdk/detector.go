@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/user/jem/internal/platform"
+	"github.com/waguilars/java-environment-manager/internal/platform"
 )
 
 // JDKInfo represents information about a JDK installation

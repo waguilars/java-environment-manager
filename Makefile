@@ -5,19 +5,14 @@
 # VERSIONING (SemVer 2.0.0)
 # ============================================
 
-# Version source: Use VERSION file, fallback to Makefile variable, then git tag
-VERSION_FILE := $(shell cat VERSION 2>/dev/null || echo "")
-VERSION ?= 0.2.0-beta
-
-# Use VERSION file if available, otherwise use Makefile version
-ifeq ($(VERSION_FILE),)
-  VERSION_DISPLAY := $(VERSION)
-else
-  VERSION_DISPLAY := $(VERSION_FILE)
-endif
+# Version from git tag, fallback to dev
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 
 # LDFLAGS for embedding version in binary
-LDFLAGS := -ldflags "-X main.Version=$(VERSION_DISPLAY)"
+LDFLAGS := -ldflags "-X main.Version=$(VERSION)"
+
+# Entry point
+ENTRY := ./cmd/jem
 
 # ============================================
 # BUILD
@@ -27,33 +22,33 @@ LDFLAGS := -ldflags "-X main.Version=$(VERSION_DISPLAY)"
 BINARY := jem
 
 # Build the binary
-build: clean
-	@echo "Building jem v$(VERSION_DISPLAY)..."
-	go build $(LDFLAGS) -o $(BINARY) .
+build:
+	@echo "Building jem $(VERSION)..."
+	go build $(LDFLAGS) -o $(BINARY) $(ENTRY)
 
 # Build for specific platform
-build-linux: clean
-	@echo "Building jem v$(VERSION_DISPLAY) for Linux..."
-	GOOS=linux GOARCH=amd64 go build $(LDFLAGS) -o $(BINARY)-linux-amd64 .
-	GOOS=linux GOARCH=arm64 go build $(LDFLAGS) -o $(BINARY)-linux-arm64 .
+build-linux:
+	@echo "Building jem $(VERSION) for Linux..."
+	GOOS=linux GOARCH=amd64 go build $(LDFLAGS) -o $(BINARY)-linux-amd64 $(ENTRY)
+	GOOS=linux GOARCH=arm64 go build $(LDFLAGS) -o $(BINARY)-linux-arm64 $(ENTRY)
 
-build-darwin: clean
-	@echo "Building jem v$(VERSION_DISPLAY) for macOS..."
-	GOOS=darwin GOARCH=amd64 go build $(LDFLAGS) -o $(BINARY)-darwin-amd64 .
-	GOOS=darwin GOARCH=arm64 go build $(LDFLAGS) -o $(BINARY)-darwin-arm64 .
+build-darwin:
+	@echo "Building jem $(VERSION) for macOS..."
+	GOOS=darwin GOARCH=amd64 go build $(LDFLAGS) -o $(BINARY)-darwin-amd64 $(ENTRY)
+	GOOS=darwin GOARCH=arm64 go build $(LDFLAGS) -o $(BINARY)-darwin-arm64 $(ENTRY)
 
-build-windows: clean
-	@echo "Building jem v$(VERSION_DISPLAY) for Windows..."
-	GOOS=windows GOARCH=amd64 go build $(LDFLAGS) -o $(BINARY)-windows-amd64.exe .
-	GOOS=windows GOARCH=arm64 go build $(LDFLAGS) -o $(BINARY)-windows-arm64.exe .
+build-windows:
+	@echo "Building jem $(VERSION) for Windows..."
+	GOOS=windows GOARCH=amd64 go build $(LDFLAGS) -o $(BINARY)-windows-amd64.exe $(ENTRY)
+	GOOS=windows GOARCH=arm64 go build $(LDFLAGS) -o $(BINARY)-windows-arm64.exe $(ENTRY)
 
 # ============================================
 # INSTALL
 # ============================================
 
-install: build
-	@echo "Installing jem v$(VERSION_DISPLAY)..."
-	go install $(LDFLAGS) .
+install:
+	@echo "Installing jem $(VERSION)..."
+	go install $(LDFLAGS) $(ENTRY)
 
 # ============================================
 # TEST
@@ -91,65 +86,7 @@ lint:
 
 # Show current version
 version:
-	@echo "Current version: $(VERSION_DISPLAY)"
-	@echo "Git version: $(GIT_VERSION)"
-	@echo "Makefile version: $(VERSION)"
-
-# Bump version (manual)
-# Usage: make bump-major, make bump-minor, make bump-patch
-bump-major:
-	@echo "Bumping MAJOR version..."
-	@awk -F. '{printf "%d.%d.%d", $$1+1, 0, 0}' VERSION > VERSION.new && mv VERSION.new VERSION
-	@make version
-
-bump-minor:
-	@echo "Bumping MINOR version..."
-	@awk -F. '{printf "%d.%d.%d", $$1, $$2+1, 0}' VERSION > VERSION.new && mv VERSION.new VERSION
-	@make version
-
-bump-patch:
-	@echo "Bumping PATCH version..."
-	@awk -F. '{printf "%d.%d.%d", $$1, $$2, $$3+1}' VERSION > VERSION.new && mv VERSION.new VERSION
-	@make version
-
-# ============================================
-# RELEASE
-# ============================================
-
-# Create a new release
-# Usage: make release version=1.0.0
-release:
-	@if [ -z "$(version)" ]; then \
-		echo "ERROR: version is required"; \
-		echo "Usage: make release version=1.0.0"; \
-		exit 1; \
-	fi
-	@echo "Creating release v$(version)..."
-	@# Update version file
-	echo "$(version)" > VERSION
-	@# Create git tag
-	git tag -a "v$(version)" -m "Release v$(version)"
-	@# Build binaries
-	$(MAKE) build
-	@# Create release assets (optional)
-	@# ./create-release-assets.sh
-	@echo "Release v$(version) created!"
-	@echo "To publish, run: git push origin v$(version)"
-
-# Pre-release (for beta/alpha versions)
-# Usage: make prerelease version=1.0.0-beta
-prerelease:
-	@if [ -z "$(version)" ]; then \
-		echo "ERROR: version is required"; \
-		echo "Usage: make prerelease version=1.0.0-beta"; \
-		exit 1; \
-	fi
-	@echo "Creating pre-release v$(version)..."
-	@echo "$(version)" > VERSION
-	git tag -a "v$(version)" -m "Pre-release v$(version)"
-	$(MAKE) build
-	@echo "Pre-release v$(version) created!"
-	@echo "To publish, run: git push origin v$(version)"
+	@echo "Version: $(VERSION)"
 
 # ============================================
 # CLEANUP
@@ -171,21 +108,20 @@ help:
 	@echo ""
 	@echo "Available commands:"
 	@echo "  make build              Build the binary"
-	@echo "  make install            Install to GOPATH"
+	@echo "  make install            Install via go install"
 	@echo "  make test               Run all tests"
 	@echo "  make test-cover         Run tests with coverage"
 	@echo "  make lint               Run linter"
 	@echo "  make version            Show current version"
-	@echo "  make bump-major         Bump MAJOR version"
-	@echo "  make bump-minor         Bump MINOR version"
-	@echo "  make bump-patch         Bump PATCH version"
-	@echo "  make release version=X  Create a release"
-	@echo "  make prerelease version=X  Create a pre-release"
 	@echo "  make clean              Clean build artifacts"
 	@echo "  make help               Show this help"
 	@echo ""
-	@echo "Current version: $(VERSION_DISPLAY)"
-	@echo "Git version: $(GIT_VERSION)"
+	@echo "Cross-compilation:"
+	@echo "  make build-linux        Build for Linux (amd64, arm64)"
+	@echo "  make build-darwin       Build for macOS (amd64, arm64)"
+	@echo "  make build-windows      Build for Windows (amd64, arm64)"
+	@echo ""
+	@echo "Current version: $(VERSION)"
 
 # ============================================
 # DEFAULT TARGET

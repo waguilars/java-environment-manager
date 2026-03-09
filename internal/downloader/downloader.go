@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/user/jem/internal/provider"
+	"github.com/waguilars/java-environment-manager/internal/provider"
 )
 
 // Downloader handles HTTP downloads with progress tracking

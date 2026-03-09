@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 
 	"github.com/AlecAivazis/survey/v2"
-	"github.com/user/jem/internal/config"
-	"github.com/user/jem/internal/jdk"
-	"github.com/user/jem/internal/platform"
+	"github.com/waguilars/java-environment-manager/internal/config"
+	"github.com/waguilars/java-environment-manager/internal/jdk"
+	"github.com/waguilars/java-environment-manager/internal/platform"
 )
 
 // UseCommand handles the 'jem use' command

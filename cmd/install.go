@@ -6,11 +6,11 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/user/jem/internal/config"
-	"github.com/user/jem/internal/downloader"
-	"github.com/user/jem/internal/jdk"
-	"github.com/user/jem/internal/platform"
-	"github.com/user/jem/internal/provider"
+	"github.com/waguilars/java-environment-manager/internal/config"
+	"github.com/waguilars/java-environment-manager/internal/downloader"
+	"github.com/waguilars/java-environment-manager/internal/jdk"
+	"github.com/waguilars/java-environment-manager/internal/platform"
+	"github.com/waguilars/java-environment-manager/internal/provider"
 )
 
 // InstallCommand handles the 'jem install' command
