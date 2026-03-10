@@ -325,8 +325,6 @@ jem stores configuration in `~/.jem/config.toml`:
 
 ```
 ~/.jem/
-├── bin/                    # Symlinks to current JDK/Gradle executables
-│   └── java -> ../jdks/current/bin/java
 ├── current/                # Symlinks to default JDK/Gradle versions (updated by jem init)
 │   ├── java -> ../jdks/temurin-21
 │   └── gradle -> ../gradles/8.5

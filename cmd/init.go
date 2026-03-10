@@ -39,13 +39,30 @@ func (c *InitCommand) Execute(ctx context.Context, shellName string) error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	// Update symlinks for default versions
+	// Check if we have any defaults configured (for informational purposes only)
+	hasDefaults := cfg.Defaults.JDK != "" || cfg.Defaults.Gradle != ""
+	if !hasDefaults {
+		// Check old format for migration
+		if cfg.JDK.Current == "" && cfg.Gradle.Current == "" {
+			// No defaults configured - this is fine, init should still work
+			// Output a warning but continue to generate the basic init script
+			fmt.Fprintf(os.Stderr, "# Note: No default JDK or Gradle configured. Run 'jem use default jdk <version>' after sourcing init.\n")
+		} else {
+			// Migrate old format to new
+			fmt.Fprintf(os.Stderr, "Warning: using deprecated config format. Run 'jem use default jdk <version>' to update.\n")
+		}
+	}
+
+	// Update symlinks for default versions (if any are configured)
 	if err := c.updateSymlinks(cfg); err != nil {
 		return err
 	}
 
 	// Generate and output shell init script
 	initScript := c.generateInitScript(cfg, shellType)
+	if initScript == "" {
+		return fmt.Errorf("failed to generate init script")
+	}
 	fmt.Println(initScript)
 
 	return nil
@@ -81,7 +98,7 @@ func (c *InitCommand) updateSymlinks(cfg *config.Config) error {
 	if cfg.Defaults.JDK != "" {
 		jdkPath := filepath.Join(homeDir, ".jem", "jdks", cfg.Defaults.JDK)
 		if _, err := os.Stat(jdkPath); err == nil {
-			if err := c.symlinkManager.UpdateCurrentJava(cfg.Defaults.JDK); err != nil {
+			if err := c.symlinkManager.UpdateCurrentJava(cfg.Defaults.JDK, jdkPath); err != nil {
 				return fmt.Errorf("failed to update current Java symlink: %w", err)
 			}
 		}
@@ -91,7 +108,7 @@ func (c *InitCommand) updateSymlinks(cfg *config.Config) error {
 	if cfg.Defaults.Gradle != "" {
 		gradlePath := filepath.Join(homeDir, ".jem", "gradles", cfg.Defaults.Gradle)
 		if _, err := os.Stat(gradlePath); err == nil {
-			if err := c.symlinkManager.UpdateCurrentGradle(cfg.Defaults.Gradle); err != nil {
+			if err := c.symlinkManager.UpdateCurrentGradle(cfg.Defaults.Gradle, gradlePath); err != nil {
 				return fmt.Errorf("failed to update current Gradle symlink: %w", err)
 			}
 		}
@@ -105,21 +122,27 @@ func (c *InitCommand) generateInitScript(cfg *config.Config, shellType config.Sh
 	homeDir := c.platform.HomeDir()
 	envVars := make(map[string]string)
 
-	// Set JAVA_HOME if current Java symlink exists
-	javaLink := filepath.Join(homeDir, ".jem", "current", "java")
-	if c.platform.IsLink(javaLink) {
-		target, err := os.Readlink(javaLink)
-		if err == nil {
-			envVars["JAVA_HOME"] = target
+	// Set JAVA_HOME - try new format first, then old format
+	jdkVersion := cfg.Defaults.JDK
+	if jdkVersion == "" {
+		jdkVersion = cfg.JDK.Current // fallback to old format
+	}
+	if jdkVersion != "" {
+		jdkPath := filepath.Join(homeDir, ".jem", "jdks", jdkVersion)
+		if _, err := os.Stat(jdkPath); err == nil {
+			envVars["JAVA_HOME"] = jdkPath
 		}
 	}
 
-	// Set GRADLE_HOME if current Gradle symlink exists
-	gradleLink := filepath.Join(homeDir, ".jem", "current", "gradle")
-	if c.platform.IsLink(gradleLink) {
-		target, err := os.Readlink(gradleLink)
-		if err == nil {
-			envVars["GRADLE_HOME"] = target
+	// Set GRADLE_HOME - try new format first, then old format
+	gradleVersion := cfg.Defaults.Gradle
+	if gradleVersion == "" {
+		gradleVersion = cfg.Gradle.Current // fallback to old format
+	}
+	if gradleVersion != "" {
+		gradlePath := filepath.Join(homeDir, ".jem", "gradles", gradleVersion)
+		if _, err := os.Stat(gradlePath); err == nil {
+			envVars["GRADLE_HOME"] = gradlePath
 		}
 	}
 

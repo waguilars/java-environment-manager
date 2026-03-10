@@ -268,11 +268,13 @@ func useJDKCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "jdk <version>",
 		Short: "Switch to a different JDK version",
-		Long: `Switch to a different JDK version.
+		Long: `Switch to a different JDK version for the current session.
 
-You can use either an installed JDK or a detected one (it will be automatically imported).
-Use --output-env to output environment variables for the current shell session.
-Use --default to set as the default JDK (updates config and symlinks).`,
+By default, this updates symlinks to switch the JDK immediately without changing
+the default configuration. The change only affects the current session.
+
+Use --default to persist the change as the new default JDK.
+Use --output-env to output environment variables for shell eval instead.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
@@ -289,8 +291,13 @@ Use --default to set as the default JDK (updates config and symlinks).`,
 			useCmd.SetOutputEnv(getFlagBool(cmd, "output-env"))
 
 			// Determine mode based on flags
-			mode := UseModeSession
-			if getFlagBool(cmd, "default") {
+			// Default: update symlinks for current session only
+			// --default: update symlinks and config (persist)
+			// --output-env: output exports for eval
+			mode := UseModeSessionSymlink
+			if getFlagBool(cmd, "output-env") {
+				mode = UseModeSession
+			} else if getFlagBool(cmd, "default") {
 				mode = UseModeDefault
 			}
 
@@ -310,11 +317,13 @@ func useGradleCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "gradle <version>",
 		Short: "Switch to a different Gradle version",
-		Long: `Switch to a different Gradle version.
+		Long: `Switch to a different Gradle version for the current session.
 
-You can use either an installed Gradle or a detected one (it will be automatically imported).
-Use --output-env to output environment variables for the current shell session.
-Use --default to set as the default Gradle (updates config and symlinks).`,
+By default, this updates symlinks to switch the Gradle version immediately without
+changing the default configuration. The change only affects the current session.
+
+Use --default to persist the change as the new default Gradle.
+Use --output-env to output environment variables for shell eval instead.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
@@ -331,8 +340,13 @@ Use --default to set as the default Gradle (updates config and symlinks).`,
 			useCmd.SetOutputEnv(getFlagBool(cmd, "output-env"))
 
 			// Determine mode based on flags
-			mode := UseModeSession
-			if getFlagBool(cmd, "default") {
+			// Default: update symlinks for current session only
+			// --default: update symlinks and config (persist)
+			// --output-env: output exports for eval
+			mode := UseModeSessionSymlink
+			if getFlagBool(cmd, "output-env") {
+				mode = UseModeSession
+			} else if getFlagBool(cmd, "default") {
 				mode = UseModeDefault
 			}
 

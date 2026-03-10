@@ -23,7 +23,7 @@ func NewSymlinkManager(p platform.Platform) *SymlinkManager {
 }
 
 // UpdateCurrentJava updates the current Java symlink to point to the specified version
-func (m *SymlinkManager) UpdateCurrentJava(version string) error {
+func (m *SymlinkManager) UpdateCurrentJava(version string, jdkPath string) error {
 	jemDir := filepath.Join(m.homeDir, ".jem")
 	currentDir := filepath.Join(jemDir, "current")
 	javaLink := filepath.Join(currentDir, "java")
@@ -33,13 +33,13 @@ func (m *SymlinkManager) UpdateCurrentJava(version string) error {
 		return fmt.Errorf("failed to create current directory: %w", err)
 	}
 
-	// Validate the version exists
-	if err := m.ValidateVersionExists("java", version); err != nil {
-		return err
+	// Validate the JDK path exists
+	if _, err := os.Stat(jdkPath); err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("java version '%s' not found at %s", version, jdkPath)
+		}
+		return fmt.Errorf("failed to check java version: %w", err)
 	}
-
-	// Determine target path
-	jdkPath := filepath.Join(jemDir, "jdks", version)
 
 	// Remove existing symlink if it exists
 	if m.platform.IsLink(javaLink) {
@@ -57,7 +57,7 @@ func (m *SymlinkManager) UpdateCurrentJava(version string) error {
 }
 
 // UpdateCurrentGradle updates the current Gradle symlink to point to the specified version
-func (m *SymlinkManager) UpdateCurrentGradle(version string) error {
+func (m *SymlinkManager) UpdateCurrentGradle(version string, gradlePath string) error {
 	jemDir := filepath.Join(m.homeDir, ".jem")
 	currentDir := filepath.Join(jemDir, "current")
 	gradleLink := filepath.Join(currentDir, "gradle")
@@ -67,13 +67,13 @@ func (m *SymlinkManager) UpdateCurrentGradle(version string) error {
 		return fmt.Errorf("failed to create current directory: %w", err)
 	}
 
-	// Validate the version exists
-	if err := m.ValidateVersionExists("gradle", version); err != nil {
-		return err
+	// Validate the Gradle path exists
+	if _, err := os.Stat(gradlePath); err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("gradle version '%s' not found at %s", version, gradlePath)
+		}
+		return fmt.Errorf("failed to check gradle version: %w", err)
 	}
-
-	// Determine target path
-	gradlePath := filepath.Join(jemDir, "gradles", version)
 
 	// Remove existing symlink if it exists
 	if m.platform.IsLink(gradleLink) {

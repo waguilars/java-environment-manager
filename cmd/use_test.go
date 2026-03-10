@@ -9,6 +9,7 @@ import (
 	"github.com/waguilars/java-environment-manager/internal/config"
 	"github.com/waguilars/java-environment-manager/internal/jdk"
 	"github.com/waguilars/java-environment-manager/internal/platform"
+	"github.com/waguilars/java-environment-manager/internal/symlink"
 )
 
 // MockPrompter implements Prompter for testing
@@ -149,7 +150,11 @@ func TestUseCommand_ExecuteJDK_Installed(t *testing.T) {
 	platform := &MockPlatformForUse{
 		HomeDirFunc: func() string { return tmpDir },
 		CreateLinkFunc: func(target, link string) error {
-			return nil
+			return os.Symlink(target, link)
+		},
+		IsLinkFunc: func(path string) bool {
+			_, err := os.Lstat(path)
+			return err == nil && (os.FileMode(0)&os.ModeSymlink != 0)
 		},
 	}
 
@@ -157,11 +162,12 @@ func TestUseCommand_ExecuteJDK_Installed(t *testing.T) {
 	jdkService := &jdk.JDKService{}
 
 	cmd := &UseCommand{
-		platform:   platform,
-		configRepo: repo,
-		jdkService: jdkService,
-		prompter:   prompter,
-		force:      false,
+		platform:       platform,
+		configRepo:     repo,
+		jdkService:     jdkService,
+		prompter:       prompter,
+		force:          false,
+		symlinkManager: symlink.NewSymlinkManager(platform),
 	}
 
 	err = cmd.ExecuteJDK(context.Background(), "21.0.1", UseModeDefault)
@@ -200,6 +206,10 @@ func TestUseCommand_ExecuteJDK_Detected_Import(t *testing.T) {
 			// Actually create the symlink so validation passes
 			return os.Symlink(target, link)
 		},
+		IsLinkFunc: func(path string) bool {
+			_, err := os.Lstat(path)
+			return err == nil
+		},
 	}
 
 	prompter := &MockPrompter{
@@ -211,11 +221,12 @@ func TestUseCommand_ExecuteJDK_Detected_Import(t *testing.T) {
 	jdkService := &jdk.JDKService{}
 
 	cmd := &UseCommand{
-		platform:   platform,
-		configRepo: repo,
-		jdkService: jdkService,
-		prompter:   prompter,
-		force:      false,
+		platform:       platform,
+		configRepo:     repo,
+		jdkService:     jdkService,
+		prompter:       prompter,
+		force:          false,
+		symlinkManager: symlink.NewSymlinkManager(platform),
 	}
 
 	err = cmd.ExecuteJDK(context.Background(), "17.0.10", UseModeDefault)
@@ -313,7 +324,11 @@ func TestUseCommand_ExecuteJDK_Force(t *testing.T) {
 	platform := &MockPlatformForUse{
 		HomeDirFunc: func() string { return tmpDir },
 		CreateLinkFunc: func(target, link string) error {
-			return nil
+			return os.Symlink(target, link)
+		},
+		IsLinkFunc: func(path string) bool {
+			_, err := os.Lstat(path)
+			return err == nil
 		},
 	}
 
@@ -321,11 +336,12 @@ func TestUseCommand_ExecuteJDK_Force(t *testing.T) {
 	jdkService := &jdk.JDKService{}
 
 	cmd := &UseCommand{
-		platform:   platform,
-		configRepo: repo,
-		jdkService: jdkService,
-		prompter:   prompter,
-		force:      true, // Force mode
+		platform:       platform,
+		configRepo:     repo,
+		jdkService:     jdkService,
+		prompter:       prompter,
+		force:          true, // Force mode
+		symlinkManager: symlink.NewSymlinkManager(platform),
 	}
 
 	err = cmd.ExecuteJDK(context.Background(), "21.0.1", UseModeDefault)
@@ -387,7 +403,11 @@ func TestUseCommand_ExecuteGradle_Installed(t *testing.T) {
 	platform := &MockPlatformForUse{
 		HomeDirFunc: func() string { return tmpDir },
 		CreateLinkFunc: func(target, link string) error {
-			return nil
+			return os.Symlink(target, link)
+		},
+		IsLinkFunc: func(path string) bool {
+			_, err := os.Lstat(path)
+			return err == nil
 		},
 	}
 
@@ -395,11 +415,12 @@ func TestUseCommand_ExecuteGradle_Installed(t *testing.T) {
 	jdkService := &jdk.JDKService{}
 
 	cmd := &UseCommand{
-		platform:   platform,
-		configRepo: repo,
-		jdkService: jdkService,
-		prompter:   prompter,
-		force:      false,
+		platform:       platform,
+		configRepo:     repo,
+		jdkService:     jdkService,
+		prompter:       prompter,
+		force:          false,
+		symlinkManager: symlink.NewSymlinkManager(platform),
 	}
 
 	err = cmd.ExecuteGradle(context.Background(), "7.6.1", UseModeDefault)
@@ -567,174 +588,6 @@ func TestUseCommand_ExecuteJDK_InvalidPath(t *testing.T) {
 	}
 	if !contains(err.Error(), "JDK directory not found") {
 		t.Errorf("Expected error to contain 'JDK directory not found', got: %v", err)
-	}
-}
-
-func TestUseCommand_ExecuteJDK_BrokenBinSymlink(t *testing.T) {
-	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, "config.toml")
-
-	repo := config.NewTOMLConfigRepository(configPath)
-	_, err := repo.Load()
-	if err != nil {
-		t.Fatalf("Failed to load config: %v", err)
-	}
-
-	// Create JDK with valid structure
-	jdkPath := filepath.Join(tmpDir, ".jem", "jdks", "temurin-21")
-	jdkBinPath := filepath.Join(jdkPath, "bin")
-	if err := os.MkdirAll(jdkBinPath, 0755); err != nil {
-		t.Fatalf("Failed to create JDK bin dir: %v", err)
-	}
-
-	// Create a broken bin symlink
-	binDir := filepath.Join(tmpDir, ".jem", "bin")
-	if err := os.Symlink("/nonexistent/jdk/bin", binDir); err != nil {
-		t.Fatalf("Failed to create broken bin symlink: %v", err)
-	}
-
-	repo.AddInstalledJDK(config.JDKInfo{
-		Path:     jdkPath,
-		Version:  "temurin-21",
-		Provider: "temurin",
-		Managed:  true,
-	})
-
-	platform := &MockPlatformForUse{
-		HomeDirFunc: func() string { return tmpDir },
-		CreateLinkFunc: func(target, link string) error {
-			return os.Symlink(target, link)
-		},
-	}
-
-	prompter := &MockPrompter{}
-	jdkService := &jdk.JDKService{}
-
-	cmd := &UseCommand{
-		platform:   platform,
-		configRepo: repo,
-		jdkService: jdkService,
-		prompter:   prompter,
-		force:      false,
-	}
-
-	// Should succeed and fix the broken symlink
-	err = cmd.ExecuteJDK(context.Background(), "temurin-21", UseModeDefault)
-	if err != nil {
-		t.Errorf("Expected no error when fixing broken bin symlink, got: %v", err)
-	}
-
-	// Verify the bin symlink was fixed (points to valid JDK bin)
-	newTarget, err := os.Readlink(binDir)
-	if err != nil {
-		t.Fatalf("Failed to read bin symlink: %v", err)
-	}
-	if newTarget != jdkBinPath {
-		t.Errorf("Expected bin symlink to point to %s, got %s", jdkBinPath, newTarget)
-	}
-}
-
-func TestUseCommand_ExecuteJDK_BinAutoCreate(t *testing.T) {
-	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, "config.toml")
-
-	repo := config.NewTOMLConfigRepository(configPath)
-	_, err := repo.Load()
-	if err != nil {
-		t.Fatalf("Failed to load config: %v", err)
-	}
-
-	// Create JDK with valid structure
-	jdkPath := filepath.Join(tmpDir, ".jem", "jdks", "temurin-21")
-	jdkBinPath := filepath.Join(jdkPath, "bin")
-	if err := os.MkdirAll(jdkBinPath, 0755); err != nil {
-		t.Fatalf("Failed to create JDK bin dir: %v", err)
-	}
-
-	// Don't create bin directory - it should be auto-created
-
-	repo.AddInstalledJDK(config.JDKInfo{
-		Path:     jdkPath,
-		Version:  "temurin-21",
-		Provider: "temurin",
-		Managed:  true,
-	})
-
-	platform := &MockPlatformForUse{
-		HomeDirFunc: func() string { return tmpDir },
-		CreateLinkFunc: func(target, link string) error {
-			return os.Symlink(target, link)
-		},
-	}
-
-	prompter := &MockPrompter{}
-	jdkService := &jdk.JDKService{}
-
-	cmd := &UseCommand{
-		platform:   platform,
-		configRepo: repo,
-		jdkService: jdkService,
-		prompter:   prompter,
-		force:      false,
-	}
-
-	err = cmd.ExecuteJDK(context.Background(), "temurin-21", UseModeDefault)
-	if err != nil {
-		t.Errorf("Expected no error, got: %v", err)
-	}
-
-	// Verify bin directory was created
-	binDir := filepath.Join(tmpDir, ".jem", "bin")
-	if _, err := os.Lstat(binDir); os.IsNotExist(err) {
-		t.Error("Expected bin directory to be auto-created")
-	}
-}
-
-func TestUseCommand_ExecuteJDK_MissingJDKBin(t *testing.T) {
-	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, "config.toml")
-
-	repo := config.NewTOMLConfigRepository(configPath)
-	_, err := repo.Load()
-	if err != nil {
-		t.Fatalf("Failed to load config: %v", err)
-	}
-
-	// Create JDK WITHOUT bin directory (simulates invalid JDK)
-	jdkPath := filepath.Join(tmpDir, ".jem", "jdks", "temurin-21")
-	// Only create the JDK directory, not the bin subdirectory
-	if err := os.MkdirAll(jdkPath, 0755); err != nil {
-		t.Fatalf("Failed to create JDK dir: %v", err)
-	}
-
-	repo.AddInstalledJDK(config.JDKInfo{
-		Path:     jdkPath,
-		Version:  "temurin-21",
-		Provider: "temurin",
-		Managed:  true,
-	})
-
-	platform := &MockPlatformForUse{
-		HomeDirFunc: func() string { return tmpDir },
-	}
-
-	prompter := &MockPrompter{}
-	jdkService := &jdk.JDKService{}
-
-	cmd := &UseCommand{
-		platform:   platform,
-		configRepo: repo,
-		jdkService: jdkService,
-		prompter:   prompter,
-		force:      false,
-	}
-
-	err = cmd.ExecuteJDK(context.Background(), "temurin-21", UseModeDefault)
-	if err == nil {
-		t.Error("Expected error for JDK without bin directory")
-	}
-	if !contains(err.Error(), "JDK bin directory not found") {
-		t.Errorf("Expected error to contain 'JDK bin directory not found', got: %v", err)
 	}
 }
 
@@ -918,7 +771,11 @@ func TestUseCommand_ExecuteJDK_DefaultMode_SetsDefault(t *testing.T) {
 	platform := &MockPlatformForUse{
 		HomeDirFunc: func() string { return tmpDir },
 		CreateLinkFunc: func(target, link string) error {
-			return nil
+			return os.Symlink(target, link)
+		},
+		IsLinkFunc: func(path string) bool {
+			_, err := os.Lstat(path)
+			return err == nil
 		},
 	}
 
@@ -926,11 +783,12 @@ func TestUseCommand_ExecuteJDK_DefaultMode_SetsDefault(t *testing.T) {
 	jdkService := &jdk.JDKService{}
 
 	cmd := &UseCommand{
-		platform:   platform,
-		configRepo: repo,
-		jdkService: jdkService,
-		prompter:   prompter,
-		force:      false,
+		platform:       platform,
+		configRepo:     repo,
+		jdkService:     jdkService,
+		prompter:       prompter,
+		force:          false,
+		symlinkManager: symlink.NewSymlinkManager(platform),
 	}
 
 	// Use default mode - should set both current and default

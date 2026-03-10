@@ -78,8 +78,8 @@
 |----|-----------|-----------|
 | PER-01 | Persistir versión activa de JDK entre sesiones de shell | Alta |
 | PER-02 | Persistir versión activa de Gradle entre sesiones de shell | Alta |
-| PER-03 | Directorio `~/.jem/bin` con symlinks a versiones activas | Alta |
-| PER-04 | Comando `jem setup` para agregar `~/.jem/bin` al PATH (una vez) | Alta |
+| PER-03 | Directorio `~/.jem/current/` con symlinks a versiones activas de JDK/Gradle | Alta |
+| PER-04 | Comando `jem init` para configurar environment variables en el shell actual | Alta |
 | PER-05 | El cambio de versión actualiza symlinks automáticamente | Alta |
 | PER-06 | No requiere scripts de inicialización por shell | Alta |
 | PER-07 | Funciona automáticamente en todas las sesiones nuevas | Alta |
@@ -145,7 +145,8 @@ java-env-manager/
 
 ```bash
 jem                         # Menú interactivo principal
-jem setup                   # Configura PATH (agrega ~/.jem/bin) - una sola vez
+jem init                    # Configura environment variables para el shell actual
+jem setup                   # Configura shell para usar jem init automáticamente
 jem list jdk                # Lista JDKs instalados
 jem list gradle             # Lista Gradles instalados
 jem install jdk <version>   # Instala JDK
@@ -161,46 +162,41 @@ jem scan                    # Detecta JDKs y Gradles existentes en el sistema
 **Estructura de directorios:**
 ```
 ~/.jem/
-├── bin/                    # Agregar al PATH (una sola vez)
-│   ├── java -> ../jdks/current/bin/java
-│   ├── javac -> ../jdks/current/bin/javac
-│   ├── gradle -> ../gradles/current/bin/gradle
-│   └── ...
+├── current/                # Symlinks a versiones activas (usado por jem init)
+│   ├── java -> ../jdks/temurin-21
+│   └── gradle -> ../gradles/8.5
 ├── jdks/
 │   ├── temurin-17/        # JDK 17 Temurin
 │   ├── corretto-21/       # JDK 21 Corretto
-│   └── current -> temurin-17/   # Symlink a versión activa
+│   └── current -> temurin-17/   # Symlink a versión activa (legacy)
 ├── gradles/
 │   ├── gradle-8.5/
 │   ├── gradle-8.6/
-│   └── current -> gradle-8.5/
+│   └── current -> gradle-8.5/   # Symlink a versión activa (legacy)
 └── config.toml             # Estado y configuración
 ```
 
 **Comportamiento:**
-1. `jem setup` - Agrega `~/.jem/bin` al PATH del usuario (modifica `.bashrc`, `.zshrc`, o `$PROFILE` según OS)
-2. `jem use jdk <version>` - Actualiza el symlink `~/.jem/jdks/current`
-3. `jem use gradle <version>` - Actualiza el symlink `~/.jem/gradles/current`
-4. Los ejecutables en `~/.jem/bin` siempre apuntan a la versión activa vía symlinks
+1. `jem init` - Genera exports de JAVA_HOME, GRADLE_HOME y PATH basados en `~/.jem/current/`
+2. `jem use jdk <version>` - Actualiza el symlink `~/.jem/current/java`
+3. `jem use gradle <version>` - Actualiza el symlink `~/.jem/current/gradle`
+4. El shell evalúa `jem init` al iniciar para configurar el environment
 
 **Ventajas:**
-- No requiere eval ni scripts de inicialización en cada sesión
-- Cambio de versión inmediato y persistente
-- Funciona en cualquier shell automáticamente
-- JAVA_HOME puede apuntar a `~/.jem/jdks/current`
+- Soporte para session-only switches (solo en la sesión actual)
+- Soporte para default versions (persistente entre sesiones)
+- JAVA_HOME y GRADLE_HOME configurados automáticamente
+- Funciona en bash, zsh, y PowerShell
 
-### 9.2 Comportamiento de `jem setup`
+### 9.2 Comportamiento de `jem init`
 
-**Variables de entorno:**
+**Variables de entorno generadas:**
 
-| Variable | No existe | Ya existe |
-|----------|-----------|-----------|
-| JAVA_HOME | Crear: `~/.jem/jdks/current` | Preguntar: "¿Reemplazar con jem?" |
-| GRADLE_HOME | Crear: `~/.jem/gradles/current` | Preguntar: "¿Reemplazar con jem?" |
-
-**PATH:**
-- Siempre agrega `~/.jem/bin` al **inicio** del PATH (prioridad máxima)
-- Si ya está en PATH, no modifica
+| Variable | Valor |
+|----------|-------|
+| JAVA_HOME | `~/.jem/current/java` (symlink al JDK activo) |
+| GRADLE_HOME | `~/.jem/current/gradle` (symlink al Gradle activo) |
+| PATH | `$JAVA_HOME/bin:$GRADLE_HOME/bin:$PATH` |
 
 **Archivos de configuración por shell:**
 
@@ -253,12 +249,12 @@ jem scan                    # Detecta JDKs y Gradles existentes en el sistema
 ### Configuración
 - [x] Ubicación por defecto: `~/.jem/`
 - [x] Formato de configuración: TOML (config.toml)
-- [x] Estrategia de persistencia: Symlinks en `~/.jem/bin/`
+- [x] Estrategia de persistencia: Symlinks en `~/.jem/current/` con `jem init` para configurar environment
 
 ### PATH Management
 - [x] Estrategia de JAVA_HOME: Si no existe → crear, si existe → preguntar para reemplazar
 - [x] Estrategia de GRADLE_HOME: Ídem que JAVA_HOME
-- [x] Estrategia de PATH: Agregar `~/.jem/bin` al inicio del PATH (prioridad máxima)
+- [x] Estrategia de PATH: `jem init` genera exports para JAVA_HOME/bin y GRADLE_HOME/bin
 - [x] jem tiene prioridad sobre instalaciones locales
 - [x] Archivos por OS/shell: `.bashrc`, `.zshrc`, `$PROFILE` (ver sección 9.2)
 

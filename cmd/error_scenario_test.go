@@ -251,57 +251,6 @@ func TestUseCommand_JDKDirectoryNotFound(t *testing.T) {
 	}
 }
 
-// TestUseCommand_JDKBinDirectoryNotFound verifies error when JDK bin directory is missing
-func TestUseCommand_JDKBinDirectoryNotFound(t *testing.T) {
-	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, ".jem", "config.toml")
-
-	repo := config.NewTOMLConfigRepository(configPath)
-	_, err := repo.Load()
-	if err != nil {
-		t.Fatalf("Failed to load config: %v", err)
-	}
-
-	// Create JDK directory without bin subdirectory
-	jdkPath := filepath.Join(tmpDir, ".jem", "jdks", "no-bin-jdk")
-	if err := os.MkdirAll(jdkPath, 0755); err != nil {
-		t.Fatalf("Failed to create JDK dir: %v", err)
-	}
-
-	repo.AddInstalledJDK(config.JDKInfo{
-		Path:     jdkPath,
-		Version:  "no-bin-21",
-		Provider: "temurin",
-		Managed:  true,
-	})
-
-	platform := &MockPlatformForErrors{
-		HomeDirFunc: func() string { return tmpDir },
-	}
-
-	prompter := &MockPrompter{}
-	jdkService := &jdk.JDKService{}
-
-	cmd := &UseCommand{
-		platform:   platform,
-		configRepo: repo,
-		jdkService: jdkService,
-		prompter:   prompter,
-		force:      false,
-	}
-
-	// Try to use a JDK without bin directory
-	err = cmd.ExecuteJDK(context.Background(), "no-bin-21", UseModeDefault)
-	if err == nil {
-		t.Error("Expected error when JDK bin directory is missing")
-	}
-
-	// Verify error message
-	if !strings.Contains(err.Error(), "bin directory not found") {
-		t.Errorf("Expected error to mention bin directory not found, got: %v", err)
-	}
-}
-
 // TestUseCommand_ImportCancelled verifies error when user cancels import
 func TestUseCommand_ImportCancelled(t *testing.T) {
 	tmpDir := t.TempDir()

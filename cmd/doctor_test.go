@@ -28,12 +28,10 @@ func TestDoctorCommand_Execute_AllPass(t *testing.T) {
 
 	// Create directory structure
 	jdksDir := filepath.Join(tmpDir, ".jem", "jdks")
-	binDir := filepath.Join(tmpDir, ".jem", "bin")
 	jdkPath := filepath.Join(jdksDir, "temurin-21")
-	jdkBinPath := filepath.Join(jdkPath, "bin")
 
-	if err := os.MkdirAll(jdkBinPath, 0755); err != nil {
-		t.Fatalf("Failed to create JDK bin dir: %v", err)
+	if err := os.MkdirAll(jdkPath, 0755); err != nil {
+		t.Fatalf("Failed to create JDK dir: %v", err)
 	}
 
 	// Create current symlink
@@ -42,25 +40,9 @@ func TestDoctorCommand_Execute_AllPass(t *testing.T) {
 		t.Fatalf("Failed to create current symlink: %v", err)
 	}
 
-	// Create bin symlink
-	if err := os.Symlink(jdkBinPath, binDir); err != nil {
-		t.Fatalf("Failed to create bin symlink: %v", err)
-	}
-
-	// Create java binary
-	javaPath := filepath.Join(binDir, "java")
-	if err := os.WriteFile(javaPath, []byte("#!/bin/sh\necho 'java version \"21.0.2\"'"), 0755); err != nil {
-		t.Fatalf("Failed to create java binary: %v", err)
-	}
-
 	// Setup config
 	repo := config.NewTOMLConfigRepository(configPath)
 	repo.SetJDKCurrent("temurin-21")
-
-	// Setup PATH
-	oldPath := os.Getenv("PATH")
-	os.Setenv("PATH", binDir+":"+oldPath)
-	defer os.Setenv("PATH", oldPath)
 
 	cmd := &DoctorCommand{
 		platform: &MockPlatformForDoctor{
@@ -107,53 +89,9 @@ func TestDoctorCommand_Execute_BrokenSymlink(t *testing.T) {
 	}
 }
 
-func TestDoctorCommand_Execute_MissingBin(t *testing.T) {
-	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, ".jem", "config.toml")
-
-	// Create directory structure without bin
-	jdksDir := filepath.Join(tmpDir, ".jem", "jdks")
-	jdkPath := filepath.Join(jdksDir, "temurin-21")
-	if err := os.MkdirAll(jdkPath, 0755); err != nil {
-		t.Fatalf("Failed to create JDK dir: %v", err)
-	}
-
-	// Create current symlink
-	currentLink := filepath.Join(jdksDir, "current")
-	if err := os.Symlink(jdkPath, currentLink); err != nil {
-		t.Fatalf("Failed to create current symlink: %v", err)
-	}
-
-	repo := config.NewTOMLConfigRepository(configPath)
-	repo.SetJDKCurrent("temurin-21")
-
-	cmd := &DoctorCommand{
-		platform: &MockPlatformForDoctor{
-			HomeDirFunc: func() string { return tmpDir },
-		},
-		configRepo: repo,
-	}
-
-	exitCode := cmd.Execute()
-	if exitCode == 0 {
-		t.Error("Expected non-zero exit code for missing bin")
-	}
-}
-
 func TestDoctorCommand_Execute_NoConfiguredJDK(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, ".jem", "config.toml")
-
-	// Create bin directory and setup PATH to avoid other failures
-	binDir := filepath.Join(tmpDir, ".jem", "bin")
-	if err := os.MkdirAll(binDir, 0755); err != nil {
-		t.Fatalf("Failed to create bin dir: %v", err)
-	}
-
-	// Setup PATH
-	oldPath := os.Getenv("PATH")
-	os.Setenv("PATH", binDir+":"+oldPath)
-	defer os.Setenv("PATH", oldPath)
 
 	repo := config.NewTOMLConfigRepository(configPath)
 	// No JDK configured

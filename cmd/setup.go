@@ -41,7 +41,7 @@ func (c *SetupCommand) Execute(ctx context.Context) error {
 			return fmt.Errorf("failed to create %s: %w", jemDir, err)
 		}
 
-		dirs := []string{"bin", "jdks", "gradles", "current"}
+		dirs := []string{"jdks", "gradles", "current"}
 		for _, dir := range dirs {
 			if err := os.MkdirAll(filepath.Join(jemDir, dir), 0755); err != nil {
 				return fmt.Errorf("failed to create %s: %w", filepath.Join(jemDir, dir), err)

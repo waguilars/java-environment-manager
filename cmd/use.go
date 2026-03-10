@@ -19,6 +19,8 @@ type UseMode int
 const (
 	// UseModeSession outputs environment variables for the current shell session
 	UseModeSession UseMode = iota
+	// UseModeSessionSymlink updates only symlinks for current session (no config changes)
+	UseModeSessionSymlink
 	// UseModeDefault updates the default version in config and updates symlinks
 	UseModeDefault
 )
@@ -109,6 +111,29 @@ func (c *UseCommand) ExecuteJDK(ctx context.Context, jdkName string, mode UseMod
 		return nil
 	}
 
+	// SessionSymlink mode: update symlinks only (no config changes)
+	if mode == UseModeSessionSymlink {
+		// Validate JDK directory exists
+		if _, err := os.Stat(jdkPath); os.IsNotExist(err) {
+			return fmt.Errorf("✗ JDK directory not found: %s\nRun 'jem doctor' for diagnostics", jdkPath)
+		}
+
+		// Update current JDK in config (session tracking, not default)
+		if err := c.configRepo.SetJDKCurrent(targetJDK.Version); err != nil {
+			return fmt.Errorf("failed to update current JDK: %w", err)
+		}
+
+		// Use SymlinkManager if available
+		if c.symlinkManager != nil {
+			if err := c.symlinkManager.UpdateCurrentJava(targetJDK.Version, jdkPath); err != nil {
+				return fmt.Errorf("failed to update Java symlink: %w", err)
+			}
+		}
+
+		fmt.Printf("✓ JDK switched to %s (%s) for current session\n", targetJDK.Version, jdkPath)
+		return nil
+	}
+
 	// Default mode: update config and symlinks
 	if mode == UseModeDefault {
 		// If JDK is detected (not installed), prompt to import
@@ -144,36 +169,13 @@ func (c *UseCommand) ExecuteJDK(ctx context.Context, jdkName string, mode UseMod
 			return fmt.Errorf("failed to update config: %w", err)
 		}
 
-		// Use SymlinkManager if available, otherwise fall back to manual symlink management
+		// Use SymlinkManager (required for new architecture)
 		if c.symlinkManager != nil {
-			if err := c.symlinkManager.UpdateCurrentJava(targetJDK.Version); err != nil {
+			if err := c.symlinkManager.UpdateCurrentJava(targetJDK.Version, jdkPath); err != nil {
 				return fmt.Errorf("failed to update Java symlink: %w", err)
 			}
 		} else {
-			// Legacy symlink management
-			jemDir := filepath.Join(c.platform.HomeDir(), ".jem")
-			jdksDir := filepath.Join(jemDir, "jdks")
-
-			// Ensure jdks directory exists
-			if err := os.MkdirAll(jdksDir, 0755); err != nil {
-				return fmt.Errorf("failed to create jdks directory: %w", err)
-			}
-
-			// Create symlink to the JDK (remove existing first)
-			currentLink := filepath.Join(jdksDir, "current")
-			if _, err := os.Lstat(currentLink); err == nil {
-				if err := os.Remove(currentLink); err != nil {
-					return fmt.Errorf("failed to remove existing current symlink: %w", err)
-				}
-			}
-			if err := c.platform.CreateLink(jdkPath, currentLink); err != nil {
-				return fmt.Errorf("failed to create current symlink: %w", err)
-			}
-
-			// Update bin symlinks
-			if err := c.updateJDKBinSymlinks(jdkPath); err != nil {
-				return fmt.Errorf("failed to update bin symlinks: %w", err)
-			}
+			return fmt.Errorf("symlink manager not initialized")
 		}
 
 		fmt.Printf("✓ Default JDK set to %s (%s)\n", targetJDK.Version, jdkPath)
@@ -232,6 +234,29 @@ func (c *UseCommand) ExecuteGradle(ctx context.Context, gradleName string, mode 
 		return nil
 	}
 
+	// SessionSymlink mode: update symlinks only (no config changes)
+	if mode == UseModeSessionSymlink {
+		// Validate Gradle directory exists
+		if _, err := os.Stat(gradlePath); os.IsNotExist(err) {
+			return fmt.Errorf("✗ Gradle directory not found: %s\nRun 'jem doctor' for diagnostics", gradlePath)
+		}
+
+		// Update current Gradle in config (session tracking, not default)
+		if err := c.configRepo.SetGradleCurrent(targetGradle.Version); err != nil {
+			return fmt.Errorf("failed to update current Gradle: %w", err)
+		}
+
+		// Use SymlinkManager if available
+		if c.symlinkManager != nil {
+			if err := c.symlinkManager.UpdateCurrentGradle(targetGradle.Version, gradlePath); err != nil {
+				return fmt.Errorf("failed to update Gradle symlink: %w", err)
+			}
+		}
+
+		fmt.Printf("✓ Gradle switched to %s (%s) for current session\n", targetGradle.Version, gradlePath)
+		return nil
+	}
+
 	// Default mode: update config and symlinks
 	if mode == UseModeDefault {
 		// If Gradle is detected (not installed), prompt to import
@@ -267,31 +292,13 @@ func (c *UseCommand) ExecuteGradle(ctx context.Context, gradleName string, mode 
 			return fmt.Errorf("failed to update config: %w", err)
 		}
 
-		// Use SymlinkManager if available, otherwise fall back to manual symlink management
+		// Use SymlinkManager (required for new architecture)
 		if c.symlinkManager != nil {
-			if err := c.symlinkManager.UpdateCurrentGradle(targetGradle.Version); err != nil {
+			if err := c.symlinkManager.UpdateCurrentGradle(targetGradle.Version, gradlePath); err != nil {
 				return fmt.Errorf("failed to update Gradle symlink: %w", err)
 			}
 		} else {
-			// Legacy symlink management
-			jemDir := filepath.Join(c.platform.HomeDir(), ".jem")
-			gradlesDir := filepath.Join(jemDir, "gradles")
-
-			// Ensure gradles directory exists
-			if err := os.MkdirAll(gradlesDir, 0755); err != nil {
-				return fmt.Errorf("failed to create gradles directory: %w", err)
-			}
-
-			// Create symlink to the Gradle (remove existing first)
-			currentLink := filepath.Join(gradlesDir, "current")
-			if _, err := os.Lstat(currentLink); err == nil {
-				if err := os.Remove(currentLink); err != nil {
-					return fmt.Errorf("failed to remove existing current symlink: %w", err)
-				}
-			}
-			if err := c.platform.CreateLink(gradlePath, currentLink); err != nil {
-				return fmt.Errorf("failed to create current symlink: %w", err)
-			}
+			return fmt.Errorf("symlink manager not initialized")
 		}
 
 		fmt.Printf("✓ Default Gradle set to %s (%s)\n", targetGradle.Version, gradlePath)
@@ -380,32 +387,6 @@ func (c *UseCommand) importGradle(ctx context.Context, gradleInfo *config.Gradle
 	}
 
 	fmt.Printf("✓ Imported Gradle %s\n", gradleInfo.Version)
-
-	return nil
-}
-
-// updateJDKBinSymlinks creates symlinks for java, javac, etc. in ~/.jem/bin
-func (c *UseCommand) updateJDKBinSymlinks(jdkPath string) error {
-	binDir := filepath.Join(c.platform.HomeDir(), ".jem", "bin")
-	jdkBinDir := filepath.Join(jdkPath, "bin")
-
-	// Validate JDK bin directory exists before creating symlink
-	if _, err := os.Stat(jdkBinDir); os.IsNotExist(err) {
-		return fmt.Errorf("JDK bin directory not found: %s", jdkBinDir)
-	}
-
-	// Remove existing bin (could be broken symlink, directory, or file)
-	if _, err := os.Lstat(binDir); err == nil {
-		// It exists - remove it regardless of type
-		if err := os.RemoveAll(binDir); err != nil {
-			return fmt.Errorf("failed to remove existing bin: %w", err)
-		}
-	}
-
-	// Create bin symlink
-	if err := c.platform.CreateLink(jdkBinDir, binDir); err != nil {
-		return fmt.Errorf("failed to create bin symlink: %w", err)
-	}
 
 	return nil
 }

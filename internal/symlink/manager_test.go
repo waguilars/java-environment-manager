@@ -47,7 +47,7 @@ func TestUpdateCurrentJava(t *testing.T) {
 	os.MkdirAll(jdkDir, 0755)
 
 	// Update current Java
-	err := manager.UpdateCurrentJava("21")
+	err := manager.UpdateCurrentJava("21", jdkDir)
 	if err != nil {
 		t.Errorf("Expected no error, got: %v", err)
 	}
@@ -74,7 +74,7 @@ func TestUpdateCurrentJava_VersionNotExists(t *testing.T) {
 	manager := NewSymlinkManager(mockPlatform)
 
 	// Try to update to non-existent version
-	err := manager.UpdateCurrentJava("99")
+	err := manager.UpdateCurrentJava("99", filepath.Join(tmpDir, ".jem", "jdks", "99"))
 	if err == nil {
 		t.Error("Expected error for non-existent version")
 	}
@@ -97,7 +97,7 @@ func TestUpdateCurrentGradle(t *testing.T) {
 	os.MkdirAll(gradleDir, 0755)
 
 	// Update current Gradle
-	err := manager.UpdateCurrentGradle("8.5")
+	err := manager.UpdateCurrentGradle("8.5", gradleDir)
 	if err != nil {
 		t.Errorf("Expected no error, got: %v", err)
 	}
@@ -124,7 +124,7 @@ func TestUpdateCurrentGradle_VersionNotExists(t *testing.T) {
 	manager := NewSymlinkManager(mockPlatform)
 
 	// Try to update to non-existent version
-	err := manager.UpdateCurrentGradle("99.9")
+	err := manager.UpdateCurrentGradle("99.9", filepath.Join(tmpDir, ".jem", "gradles", "99.9"))
 	if err == nil {
 		t.Error("Expected error for non-existent version")
 	}
@@ -397,7 +397,7 @@ func TestUpdateCurrentJava_ReplaceExisting(t *testing.T) {
 	os.MkdirAll(jdk17Dir, 0755)
 
 	// Set initial version
-	err := manager.UpdateCurrentJava("21")
+	err := manager.UpdateCurrentJava("21", jdk21Dir)
 	if err != nil {
 		t.Fatalf("Failed to set initial Java version: %v", err)
 	}
@@ -410,7 +410,7 @@ func TestUpdateCurrentJava_ReplaceExisting(t *testing.T) {
 	}
 
 	// Update to different version
-	err = manager.UpdateCurrentJava("17")
+	err = manager.UpdateCurrentJava("17", jdk17Dir)
 	if err != nil {
 		t.Errorf("Expected no error when replacing symlink, got: %v", err)
 	}

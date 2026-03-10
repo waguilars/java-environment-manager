@@ -257,17 +257,22 @@ func TestUseCommand_DefaultMode_UpdatesConfigDefault(t *testing.T) {
 		CreateLinkFunc: func(target, link string) error {
 			return os.Symlink(target, link)
 		},
+		IsLinkFunc: func(path string) bool {
+			_, err := os.Lstat(path)
+			return err == nil
+		},
 	}
 
 	prompter := &MockPrompter{}
 	jdkService := &jdk.JDKService{}
 
 	cmd := &UseCommand{
-		platform:   platform,
-		configRepo: repo,
-		jdkService: jdkService,
-		prompter:   prompter,
-		force:      false,
+		platform:       platform,
+		configRepo:     repo,
+		jdkService:     jdkService,
+		prompter:       prompter,
+		force:          false,
+		symlinkManager: symlink.NewSymlinkManager(platform),
 	}
 
 	err = cmd.ExecuteJDK(context.Background(), "21.0.1", UseModeDefault)

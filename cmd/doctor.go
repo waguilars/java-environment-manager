@@ -44,8 +44,6 @@ func (c *DoctorCommand) Execute() int {
 
 	results := []CheckResult{
 		c.checkCurrentSymlink(),
-		c.checkBinDirectory(),
-		c.checkPathConfiguration(),
 		c.checkVersionConsistency(),
 	}
 
@@ -115,116 +113,6 @@ func (c *DoctorCommand) checkCurrentSymlink() CheckResult {
 		Name:    "Current JDK Symlink",
 		Status:  StatusPass,
 		Message: fmt.Sprintf("Points to valid JDK: %s", target),
-	}
-}
-
-// checkBinDirectory verifies ~/.jem/bin exists and contains java binary
-func (c *DoctorCommand) checkBinDirectory() CheckResult {
-	binDir := filepath.Join(c.platform.HomeDir(), ".jem", "bin")
-
-	// Check if bin exists
-	info, err := os.Lstat(binDir)
-	if os.IsNotExist(err) {
-		return CheckResult{
-			Name:        "Bin Directory",
-			Status:      StatusFail,
-			Message:     "~/.jem/bin does not exist",
-			Remediation: "Run 'jem use jdk <version>' to create it",
-		}
-	}
-
-	// Check if it's a symlink (expected case)
-	if info.Mode()&os.ModeSymlink != 0 {
-		target, err := os.Readlink(binDir)
-		if err != nil {
-			return CheckResult{
-				Name:        "Bin Directory",
-				Status:      StatusFail,
-				Message:     "Cannot read bin symlink",
-				Remediation: "Remove it manually and run 'jem use jdk <version>'",
-			}
-		}
-
-		if _, err := os.Stat(target); os.IsNotExist(err) {
-			return CheckResult{
-				Name:        "Bin Directory",
-				Status:      StatusFail,
-				Message:     fmt.Sprintf("Bin symlink target does not exist: %s", target),
-				Remediation: "Run 'jem use jdk <version>' to fix",
-			}
-		}
-
-		// Check for java binary
-		javaPath := filepath.Join(binDir, "java")
-		if _, err := os.Stat(javaPath); os.IsNotExist(err) {
-			return CheckResult{
-				Name:        "Bin Directory",
-				Status:      StatusWarn,
-				Message:     "Bin exists but java binary not found",
-				Remediation: "Run 'jem use jdk <version>' to fix",
-			}
-		}
-
-		return CheckResult{
-			Name:    "Bin Directory",
-			Status:  StatusPass,
-			Message: fmt.Sprintf("Contains valid Java binaries (%s)", target),
-		}
-	}
-
-	// It's a regular directory (also acceptable)
-	javaPath := filepath.Join(binDir, "java")
-	if _, err := os.Stat(javaPath); os.IsNotExist(err) {
-		return CheckResult{
-			Name:        "Bin Directory",
-			Status:      StatusWarn,
-			Message:     "Bin directory exists but java binary not found",
-			Remediation: "Run 'jem use jdk <version>' to fix",
-		}
-	}
-
-	return CheckResult{
-		Name:    "Bin Directory",
-		Status:  StatusPass,
-		Message: "Contains valid Java binaries",
-	}
-}
-
-// checkPathConfiguration verifies ~/.jem/bin is in PATH with correct priority
-func (c *DoctorCommand) checkPathConfiguration() CheckResult {
-	path := os.Getenv("PATH")
-	homeDir := c.platform.HomeDir()
-	jemBin := filepath.Join(homeDir, ".jem", "bin")
-
-	// Check if jem/bin is in PATH
-	if !strings.Contains(path, jemBin) && !strings.Contains(path, ".jem/bin") {
-		return CheckResult{
-			Name:        "PATH Configuration",
-			Status:      StatusFail,
-			Message:     "~/.jem/bin is not in PATH",
-			Remediation: "Run 'jem setup' to configure PATH",
-		}
-	}
-
-	// Check priority (jem bin should be first)
-	// This is a heuristic check
-	paths := strings.Split(path, string(os.PathListSeparator))
-	if len(paths) > 0 {
-		firstPath := paths[0]
-		if strings.Contains(firstPath, ".jem/bin") || strings.Contains(firstPath, jemBin) {
-			return CheckResult{
-				Name:    "PATH Configuration",
-				Status:  StatusPass,
-				Message: "~/.jem/bin is first in PATH (correct priority)",
-			}
-		}
-	}
-
-	return CheckResult{
-		Name:        "PATH Configuration",
-		Status:      StatusWarn,
-		Message:     "~/.jem/bin is in PATH but not first",
-		Remediation: "Re-run 'jem setup' or manually move ~/.jem/bin to PATH start",
 	}
 }
 
