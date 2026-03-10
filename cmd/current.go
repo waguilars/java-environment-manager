@@ -5,6 +5,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"strings"
 
 	"github.com/waguilars/java-environment-manager/internal/config"
 	"github.com/waguilars/java-environment-manager/internal/jdk"
@@ -40,6 +42,19 @@ func (c *CurrentCommand) Execute() error {
 
 		if !found {
 			fmt.Printf("JDK:     %s (not found)\n", currentJDK)
+		}
+
+		// Version consistency check: compare configured version with actual java -version
+		actualVersion := detectActualJavaVersion()
+		if actualVersion != "" {
+			configuredMajor := extractMajorVersion(currentJDK)
+			actualMajor := extractMajorVersion(actualVersion)
+			if configuredMajor != "" && actualMajor != "" && configuredMajor != actualMajor {
+				fmt.Printf("⚠ Configured version (%s) does not match active Java (%s)\n", configuredMajor, actualMajor)
+				fmt.Println("  Check PATH priority or run 'jem doctor'")
+			}
+		} else {
+			fmt.Println("⚠ java executable not found in PATH")
 		}
 	} else {
 		// No JDK configured in jem, try to detect from system
@@ -118,4 +133,51 @@ func detectSystemGradle() *config.GradleInfo {
 	}
 
 	return nil
+}
+
+// detectActualJavaVersion executes java -version and parses the output
+func detectActualJavaVersion() string {
+	cmd := exec.Command("java", "-version")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return ""
+	}
+	return parseJavaVersion(string(output))
+}
+
+// parseJavaVersion parses the version string from java -version output
+// Handles both OpenJDK and Oracle JDK formats
+func parseJavaVersion(output string) string {
+	// Parse OpenJDK format: openjdk version "21.0.2" 2024-01-16 LTS
+	// Parse Oracle format: java version "21.0.2" 2024-01-16 LTS
+	lines := strings.Split(output, "\n")
+	if len(lines) == 0 {
+		return ""
+	}
+
+	firstLine := lines[0]
+
+	// Extract version between quotes
+	start := strings.Index(firstLine, "\"")
+	if start == -1 {
+		return ""
+	}
+	end := strings.Index(firstLine[start+1:], "\"")
+	if end == -1 {
+		return ""
+	}
+
+	return firstLine[start+1 : start+1+end]
+}
+
+// extractMajorVersion extracts the major version number from a version string
+// Handles formats like "temurin-21.0.2", "21.0.2", "17"
+func extractMajorVersion(version string) string {
+	// Remove any prefix before the number (e.g., "temurin-" from "temurin-21.0.2")
+	re := regexp.MustCompile(`(\d+)`)
+	match := re.FindStringSubmatch(version)
+	if len(match) > 1 {
+		return match[1]
+	}
+	return ""
 }

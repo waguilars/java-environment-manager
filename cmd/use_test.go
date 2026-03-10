@@ -116,7 +116,7 @@ func TestUseCommand_ExecuteJDK_NotFound(t *testing.T) {
 		force:      false,
 	}
 
-	err = cmd.ExecuteJDK(context.Background(), "non-existent-version")
+	err = cmd.ExecuteJDK(context.Background(), "non-existent-version", UseModeDefault)
 	if err == nil {
 		t.Error("Expected error for non-existent JDK")
 	}
@@ -132,9 +132,10 @@ func TestUseCommand_ExecuteJDK_Installed(t *testing.T) {
 		t.Fatalf("Failed to load config: %v", err)
 	}
 
-	// Add an installed JDK
-	jdkPath := filepath.Join(tmpDir, "jdks", "temurin-21")
-	if err := os.MkdirAll(filepath.Dir(jdkPath), 0755); err != nil {
+	// Add an installed JDK - create the actual directory structure
+	jdkPath := filepath.Join(tmpDir, ".jem", "jdks", "21.0.1")
+	jdkBinPath := filepath.Join(jdkPath, "bin")
+	if err := os.MkdirAll(jdkBinPath, 0755); err != nil {
 		t.Fatalf("Failed to create JDK dir: %v", err)
 	}
 
@@ -163,7 +164,7 @@ func TestUseCommand_ExecuteJDK_Installed(t *testing.T) {
 		force:      false,
 	}
 
-	err = cmd.ExecuteJDK(context.Background(), "21.0.1")
+	err = cmd.ExecuteJDK(context.Background(), "21.0.1", UseModeDefault)
 	if err != nil {
 		t.Errorf("Expected no error, got: %v", err)
 	}
@@ -179,9 +180,10 @@ func TestUseCommand_ExecuteJDK_Detected_Import(t *testing.T) {
 		t.Fatalf("Failed to load config: %v", err)
 	}
 
-	// Add a detected JDK (not managed)
+	// Add a detected JDK (not managed) - create the actual directory structure with bin
 	detectedPath := filepath.Join(tmpDir, "detected-jdk")
-	if err := os.MkdirAll(detectedPath, 0755); err != nil {
+	detectedBinPath := filepath.Join(detectedPath, "bin")
+	if err := os.MkdirAll(detectedBinPath, 0755); err != nil {
 		t.Fatalf("Failed to create detected JDK dir: %v", err)
 	}
 
@@ -195,7 +197,8 @@ func TestUseCommand_ExecuteJDK_Detected_Import(t *testing.T) {
 	platform := &MockPlatformForUse{
 		HomeDirFunc: func() string { return tmpDir },
 		CreateLinkFunc: func(target, link string) error {
-			return nil
+			// Actually create the symlink so validation passes
+			return os.Symlink(target, link)
 		},
 	}
 
@@ -215,7 +218,7 @@ func TestUseCommand_ExecuteJDK_Detected_Import(t *testing.T) {
 		force:      false,
 	}
 
-	err = cmd.ExecuteJDK(context.Background(), "17.0.10")
+	err = cmd.ExecuteJDK(context.Background(), "17.0.10", UseModeDefault)
 	if err != nil {
 		t.Errorf("Expected no error, got: %v", err)
 	}
@@ -277,7 +280,7 @@ func TestUseCommand_ExecuteJDK_Detected_SkipImport(t *testing.T) {
 		force:      false,
 	}
 
-	err = cmd.ExecuteJDK(context.Background(), "17.0.10")
+	err = cmd.ExecuteJDK(context.Background(), "17.0.10", UseModeDefault)
 	if err == nil {
 		t.Error("Expected error when import is cancelled")
 	}
@@ -293,9 +296,10 @@ func TestUseCommand_ExecuteJDK_Force(t *testing.T) {
 		t.Fatalf("Failed to load config: %v", err)
 	}
 
-	// Add an installed JDK
-	jdkPath := filepath.Join(tmpDir, "jdks", "temurin-21")
-	if err := os.MkdirAll(filepath.Dir(jdkPath), 0755); err != nil {
+	// Add an installed JDK - create the actual directory structure
+	jdkPath := filepath.Join(tmpDir, ".jem", "jdks", "21.0.1")
+	jdkBinPath := filepath.Join(jdkPath, "bin")
+	if err := os.MkdirAll(jdkBinPath, 0755); err != nil {
 		t.Fatalf("Failed to create JDK dir: %v", err)
 	}
 
@@ -324,7 +328,7 @@ func TestUseCommand_ExecuteJDK_Force(t *testing.T) {
 		force:      true, // Force mode
 	}
 
-	err = cmd.ExecuteJDK(context.Background(), "21.0.1")
+	err = cmd.ExecuteJDK(context.Background(), "21.0.1", UseModeDefault)
 	if err != nil {
 		t.Errorf("Expected no error, got: %v", err)
 	}
@@ -352,7 +356,7 @@ func TestUseCommand_ExecuteGradle_NotFound(t *testing.T) {
 		force:      false,
 	}
 
-	err = cmd.ExecuteGradle(context.Background(), "non-existent-version")
+	err = cmd.ExecuteGradle(context.Background(), "non-existent-version", UseModeDefault)
 	if err == nil {
 		t.Error("Expected error for non-existent Gradle")
 	}
@@ -368,9 +372,9 @@ func TestUseCommand_ExecuteGradle_Installed(t *testing.T) {
 		t.Fatalf("Failed to load config: %v", err)
 	}
 
-	// Add an installed Gradle
-	gradlePath := filepath.Join(tmpDir, "gradles", "gradle-7.6.1")
-	if err := os.MkdirAll(filepath.Dir(gradlePath), 0755); err != nil {
+	// Add an installed Gradle - create the actual directory structure
+	gradlePath := filepath.Join(tmpDir, ".jem", "gradles", "7.6.1")
+	if err := os.MkdirAll(gradlePath, 0755); err != nil {
 		t.Fatalf("Failed to create Gradle dir: %v", err)
 	}
 
@@ -398,7 +402,7 @@ func TestUseCommand_ExecuteGradle_Installed(t *testing.T) {
 		force:      false,
 	}
 
-	err = cmd.ExecuteGradle(context.Background(), "7.6.1")
+	err = cmd.ExecuteGradle(context.Background(), "7.6.1", UseModeDefault)
 	if err != nil {
 		t.Errorf("Expected no error, got: %v", err)
 	}
@@ -518,5 +522,481 @@ func TestUseCommand_ImportGradle(t *testing.T) {
 
 	if installedGradles[0].Managed != true {
 		t.Error("Expected imported Gradle to be managed")
+	}
+}
+
+func TestUseCommand_ExecuteJDK_InvalidPath(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	repo := config.NewTOMLConfigRepository(configPath)
+	_, err := repo.Load()
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+
+	// Add an installed JDK but don't create the directory (simulates corrupted config)
+	jdkPath := filepath.Join(tmpDir, ".jem", "jdks", "nonexistent-17")
+	// Note: we don't create the directory
+
+	repo.AddInstalledJDK(config.JDKInfo{
+		Path:     jdkPath,
+		Version:  "nonexistent-17",
+		Provider: "temurin",
+		Managed:  true,
+	})
+
+	platform := &MockPlatformForUse{
+		HomeDirFunc: func() string { return tmpDir },
+	}
+
+	prompter := &MockPrompter{}
+	jdkService := &jdk.JDKService{}
+
+	cmd := &UseCommand{
+		platform:   platform,
+		configRepo: repo,
+		jdkService: jdkService,
+		prompter:   prompter,
+		force:      false,
+	}
+
+	err = cmd.ExecuteJDK(context.Background(), "nonexistent-17", UseModeDefault)
+	if err == nil {
+		t.Error("Expected error for non-existent JDK path")
+	}
+	if !contains(err.Error(), "JDK directory not found") {
+		t.Errorf("Expected error to contain 'JDK directory not found', got: %v", err)
+	}
+}
+
+func TestUseCommand_ExecuteJDK_BrokenBinSymlink(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	repo := config.NewTOMLConfigRepository(configPath)
+	_, err := repo.Load()
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+
+	// Create JDK with valid structure
+	jdkPath := filepath.Join(tmpDir, ".jem", "jdks", "temurin-21")
+	jdkBinPath := filepath.Join(jdkPath, "bin")
+	if err := os.MkdirAll(jdkBinPath, 0755); err != nil {
+		t.Fatalf("Failed to create JDK bin dir: %v", err)
+	}
+
+	// Create a broken bin symlink
+	binDir := filepath.Join(tmpDir, ".jem", "bin")
+	if err := os.Symlink("/nonexistent/jdk/bin", binDir); err != nil {
+		t.Fatalf("Failed to create broken bin symlink: %v", err)
+	}
+
+	repo.AddInstalledJDK(config.JDKInfo{
+		Path:     jdkPath,
+		Version:  "temurin-21",
+		Provider: "temurin",
+		Managed:  true,
+	})
+
+	platform := &MockPlatformForUse{
+		HomeDirFunc: func() string { return tmpDir },
+		CreateLinkFunc: func(target, link string) error {
+			return os.Symlink(target, link)
+		},
+	}
+
+	prompter := &MockPrompter{}
+	jdkService := &jdk.JDKService{}
+
+	cmd := &UseCommand{
+		platform:   platform,
+		configRepo: repo,
+		jdkService: jdkService,
+		prompter:   prompter,
+		force:      false,
+	}
+
+	// Should succeed and fix the broken symlink
+	err = cmd.ExecuteJDK(context.Background(), "temurin-21", UseModeDefault)
+	if err != nil {
+		t.Errorf("Expected no error when fixing broken bin symlink, got: %v", err)
+	}
+
+	// Verify the bin symlink was fixed (points to valid JDK bin)
+	newTarget, err := os.Readlink(binDir)
+	if err != nil {
+		t.Fatalf("Failed to read bin symlink: %v", err)
+	}
+	if newTarget != jdkBinPath {
+		t.Errorf("Expected bin symlink to point to %s, got %s", jdkBinPath, newTarget)
+	}
+}
+
+func TestUseCommand_ExecuteJDK_BinAutoCreate(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	repo := config.NewTOMLConfigRepository(configPath)
+	_, err := repo.Load()
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+
+	// Create JDK with valid structure
+	jdkPath := filepath.Join(tmpDir, ".jem", "jdks", "temurin-21")
+	jdkBinPath := filepath.Join(jdkPath, "bin")
+	if err := os.MkdirAll(jdkBinPath, 0755); err != nil {
+		t.Fatalf("Failed to create JDK bin dir: %v", err)
+	}
+
+	// Don't create bin directory - it should be auto-created
+
+	repo.AddInstalledJDK(config.JDKInfo{
+		Path:     jdkPath,
+		Version:  "temurin-21",
+		Provider: "temurin",
+		Managed:  true,
+	})
+
+	platform := &MockPlatformForUse{
+		HomeDirFunc: func() string { return tmpDir },
+		CreateLinkFunc: func(target, link string) error {
+			return os.Symlink(target, link)
+		},
+	}
+
+	prompter := &MockPrompter{}
+	jdkService := &jdk.JDKService{}
+
+	cmd := &UseCommand{
+		platform:   platform,
+		configRepo: repo,
+		jdkService: jdkService,
+		prompter:   prompter,
+		force:      false,
+	}
+
+	err = cmd.ExecuteJDK(context.Background(), "temurin-21", UseModeDefault)
+	if err != nil {
+		t.Errorf("Expected no error, got: %v", err)
+	}
+
+	// Verify bin directory was created
+	binDir := filepath.Join(tmpDir, ".jem", "bin")
+	if _, err := os.Lstat(binDir); os.IsNotExist(err) {
+		t.Error("Expected bin directory to be auto-created")
+	}
+}
+
+func TestUseCommand_ExecuteJDK_MissingJDKBin(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	repo := config.NewTOMLConfigRepository(configPath)
+	_, err := repo.Load()
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+
+	// Create JDK WITHOUT bin directory (simulates invalid JDK)
+	jdkPath := filepath.Join(tmpDir, ".jem", "jdks", "temurin-21")
+	// Only create the JDK directory, not the bin subdirectory
+	if err := os.MkdirAll(jdkPath, 0755); err != nil {
+		t.Fatalf("Failed to create JDK dir: %v", err)
+	}
+
+	repo.AddInstalledJDK(config.JDKInfo{
+		Path:     jdkPath,
+		Version:  "temurin-21",
+		Provider: "temurin",
+		Managed:  true,
+	})
+
+	platform := &MockPlatformForUse{
+		HomeDirFunc: func() string { return tmpDir },
+	}
+
+	prompter := &MockPrompter{}
+	jdkService := &jdk.JDKService{}
+
+	cmd := &UseCommand{
+		platform:   platform,
+		configRepo: repo,
+		jdkService: jdkService,
+		prompter:   prompter,
+		force:      false,
+	}
+
+	err = cmd.ExecuteJDK(context.Background(), "temurin-21", UseModeDefault)
+	if err == nil {
+		t.Error("Expected error for JDK without bin directory")
+	}
+	if !contains(err.Error(), "JDK bin directory not found") {
+		t.Errorf("Expected error to contain 'JDK bin directory not found', got: %v", err)
+	}
+}
+
+// Helper function
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsAt(s, substr))
+}
+
+func containsAt(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
+
+// Tests for Session Mode (Phase 3)
+
+func TestUseCommand_ExecuteJDK_SessionMode(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	repo := config.NewTOMLConfigRepository(configPath)
+	_, err := repo.Load()
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+
+	// Add an installed JDK - create the actual directory structure
+	jdkPath := filepath.Join(tmpDir, ".jem", "jdks", "21.0.1")
+	jdkBinPath := filepath.Join(jdkPath, "bin")
+	if err := os.MkdirAll(jdkBinPath, 0755); err != nil {
+		t.Fatalf("Failed to create JDK dir: %v", err)
+	}
+
+	repo.AddInstalledJDK(config.JDKInfo{
+		Path:     jdkPath,
+		Version:  "21.0.1",
+		Provider: "temurin",
+		Managed:  true,
+	})
+
+	platform := &MockPlatformForUse{
+		HomeDirFunc: func() string { return tmpDir },
+	}
+
+	prompter := &MockPrompter{}
+	jdkService := &jdk.JDKService{}
+
+	cmd := &UseCommand{
+		platform:   platform,
+		configRepo: repo,
+		jdkService: jdkService,
+		prompter:   prompter,
+		force:      false,
+	}
+
+	// Use session mode - should output env vars, not update symlinks
+	err = cmd.ExecuteJDK(context.Background(), "21.0.1", UseModeSession)
+	if err != nil {
+		t.Errorf("Expected no error, got: %v", err)
+	}
+
+	// In session mode, config should NOT be updated
+	if repo.GetJDKCurrent() == "21.0.1" {
+		t.Error("Session mode should not update current JDK in config")
+	}
+}
+
+func TestUseCommand_ExecuteJDK_SessionMode_Uninstalled(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	repo := config.NewTOMLConfigRepository(configPath)
+	_, err := repo.Load()
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+
+	platform := &MockPlatformForUse{
+		HomeDirFunc: func() string { return tmpDir },
+	}
+
+	prompter := &MockPrompter{}
+	jdkService := &jdk.JDKService{}
+
+	cmd := &UseCommand{
+		platform:   platform,
+		configRepo: repo,
+		jdkService: jdkService,
+		prompter:   prompter,
+		force:      false,
+	}
+
+	// Use session mode with uninstalled JDK
+	err = cmd.ExecuteJDK(context.Background(), "uninstalled-21", UseModeSession)
+	if err == nil {
+		t.Error("Expected error for uninstalled JDK in session mode")
+	}
+
+	// Error should mention install command
+	if !contains(err.Error(), "install") {
+		t.Errorf("Expected error to mention install command, got: %v", err)
+	}
+}
+
+func TestUseCommand_ExecuteGradle_SessionMode(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	repo := config.NewTOMLConfigRepository(configPath)
+	_, err := repo.Load()
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+
+	// Add an installed Gradle - create the actual directory structure
+	gradlePath := filepath.Join(tmpDir, ".jem", "gradles", "7.6.1")
+	if err := os.MkdirAll(gradlePath, 0755); err != nil {
+		t.Fatalf("Failed to create Gradle dir: %v", err)
+	}
+
+	repo.AddInstalledGradle(config.GradleInfo{
+		Path:    gradlePath,
+		Version: "7.6.1",
+		Managed: true,
+	})
+
+	platform := &MockPlatformForUse{
+		HomeDirFunc: func() string { return tmpDir },
+	}
+
+	prompter := &MockPrompter{}
+	jdkService := &jdk.JDKService{}
+
+	cmd := &UseCommand{
+		platform:   platform,
+		configRepo: repo,
+		jdkService: jdkService,
+		prompter:   prompter,
+		force:      false,
+	}
+
+	// Use session mode - should output env vars
+	err = cmd.ExecuteGradle(context.Background(), "7.6.1", UseModeSession)
+	if err != nil {
+		t.Errorf("Expected no error, got: %v", err)
+	}
+
+	// In session mode, config should NOT be updated
+	if repo.GetGradleCurrent() == "7.6.1" {
+		t.Error("Session mode should not update current Gradle in config")
+	}
+}
+
+func TestUseCommand_ExecuteJDK_DefaultMode_SetsDefault(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	repo := config.NewTOMLConfigRepository(configPath)
+	_, err := repo.Load()
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+
+	// Add an installed JDK - create the actual directory structure
+	jdkPath := filepath.Join(tmpDir, ".jem", "jdks", "21.0.1")
+	jdkBinPath := filepath.Join(jdkPath, "bin")
+	if err := os.MkdirAll(jdkBinPath, 0755); err != nil {
+		t.Fatalf("Failed to create JDK dir: %v", err)
+	}
+
+	repo.AddInstalledJDK(config.JDKInfo{
+		Path:     jdkPath,
+		Version:  "21.0.1",
+		Provider: "temurin",
+		Managed:  true,
+	})
+
+	platform := &MockPlatformForUse{
+		HomeDirFunc: func() string { return tmpDir },
+		CreateLinkFunc: func(target, link string) error {
+			return nil
+		},
+	}
+
+	prompter := &MockPrompter{}
+	jdkService := &jdk.JDKService{}
+
+	cmd := &UseCommand{
+		platform:   platform,
+		configRepo: repo,
+		jdkService: jdkService,
+		prompter:   prompter,
+		force:      false,
+	}
+
+	// Use default mode - should set both current and default
+	err = cmd.ExecuteJDK(context.Background(), "21.0.1", UseModeDefault)
+	if err != nil {
+		t.Errorf("Expected no error, got: %v", err)
+	}
+
+	// In default mode, both current and default should be set
+	if repo.GetJDKCurrent() != "21.0.1" {
+		t.Errorf("Expected current JDK to be set to 21.0.1, got %s", repo.GetJDKCurrent())
+	}
+
+	if repo.GetDefaultJDK() != "21.0.1" {
+		t.Errorf("Expected default JDK to be set to 21.0.1, got %s", repo.GetDefaultJDK())
+	}
+}
+
+func TestUseCommand_ExecuteJDK_OutputEnvFlag(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	repo := config.NewTOMLConfigRepository(configPath)
+	_, err := repo.Load()
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+
+	// Add an installed JDK - create the actual directory structure
+	jdkPath := filepath.Join(tmpDir, ".jem", "jdks", "21.0.1")
+	jdkBinPath := filepath.Join(jdkPath, "bin")
+	if err := os.MkdirAll(jdkBinPath, 0755); err != nil {
+		t.Fatalf("Failed to create JDK dir: %v", err)
+	}
+
+	repo.AddInstalledJDK(config.JDKInfo{
+		Path:     jdkPath,
+		Version:  "21.0.1",
+		Provider: "temurin",
+		Managed:  true,
+	})
+
+	platform := &MockPlatformForUse{
+		HomeDirFunc: func() string { return tmpDir },
+	}
+
+	prompter := &MockPrompter{}
+	jdkService := &jdk.JDKService{}
+
+	cmd := &UseCommand{
+		platform:   platform,
+		configRepo: repo,
+		jdkService: jdkService,
+		prompter:   prompter,
+		force:      false,
+		outputEnv:  true, // Set outputEnv flag
+	}
+
+	// With outputEnv flag, should behave like session mode
+	err = cmd.ExecuteJDK(context.Background(), "21.0.1", UseModeSession)
+	if err != nil {
+		t.Errorf("Expected no error, got: %v", err)
+	}
+
+	// Should not update current
+	if repo.GetJDKCurrent() == "21.0.1" {
+		t.Error("With outputEnv flag, should not update current JDK")
 	}
 }

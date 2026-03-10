@@ -41,7 +41,7 @@ func (c *SetupCommand) Execute(ctx context.Context) error {
 			return fmt.Errorf("failed to create %s: %w", jemDir, err)
 		}
 
-		dirs := []string{"bin", "jdks", "gradles"}
+		dirs := []string{"bin", "jdks", "gradles", "current"}
 		for _, dir := range dirs {
 			if err := os.MkdirAll(filepath.Join(jemDir, dir), 0755); err != nil {
 				return fmt.Errorf("failed to create %s: %w", filepath.Join(jemDir, dir), err)
@@ -58,6 +58,10 @@ func (c *SetupCommand) Execute(ctx context.Context) error {
 			},
 			Gradle: config.GradleConfig{
 				Current: "",
+			},
+			Defaults: config.DefaultsConfig{
+				JDK:    "",
+				Gradle: "",
 			},
 			InstalledJDKs:    make(map[string]config.JDKInfo),
 			DetectedJDKs:     make(map[string]config.JDKInfo),
@@ -115,7 +119,7 @@ func (c *SetupCommand) Execute(ctx context.Context) error {
 // isShellConfigured checks if the shell is already configured for jem
 func (c *SetupCommand) isShellConfigured(shellConfigPath string) bool {
 	if shellConfigPath == "$PROFILE" {
-		// For PowerShell, check if jem is in PATH
+		// For PowerShell, check if jem init pattern exists
 		// We can't easily check PowerShell profile without parsing it
 		// So we'll skip this check for now
 		return false
@@ -139,11 +143,29 @@ func (c *SetupCommand) isShellConfigured(shellConfigPath string) bool {
 		return false
 	}
 
-	return strings.Contains(string(content), ".jem/bin")
+	// Check for new jem init pattern
+	contentStr := string(content)
+	return strings.Contains(contentStr, `eval "$(jem init)"`) ||
+		strings.Contains(contentStr, `Invoke-Expression`) && strings.Contains(contentStr, "jem init")
 }
 
-// configureShell adds jem to the shell's PATH
+// configureShell adds jem init to the shell's configuration
 func (c *SetupCommand) configureShell(shell config.Shell, shellConfigPath string) error {
+	// Handle Fish shell specially - it's not supported for session-only mode
+	if shell == config.ShellFish {
+		fmt.Println()
+		fmt.Println("⚠ Fish shell is not supported for session-only mode.")
+		fmt.Println()
+		fmt.Println("You can still use jem with Fish by:")
+		fmt.Println("1. Using 'jem use default jdk <version>' for persistent changes")
+		fmt.Println("2. Manually setting environment variables:")
+		fmt.Println("   set -x JAVA_HOME ~/.jem/current/java")
+		fmt.Println("   set -x PATH $JAVA_HOME/bin $PATH")
+		fmt.Println()
+		fmt.Println("Contributions for Fish support are welcome!")
+		return nil
+	}
+
 	// Resolve symlink if the path is a symlink
 	resolvedPath := shellConfigPath
 	if info, err := os.Lstat(shellConfigPath); err == nil && info.Mode()&os.ModeSymlink != 0 {
@@ -199,22 +221,20 @@ func (c *SetupCommand) configureShell(shell config.Shell, shellConfigPath string
 	}
 	defer file.Close()
 
-	// Write configuration
+	// Write configuration using jem init pattern
 	var lines []string
 	switch shell {
-	case config.Shell("bash"), config.Shell("zsh"):
+	case config.ShellBash, config.ShellZsh:
 		lines = []string{
 			"",
-			"# jem configuration",
-			`export PATH="$HOME/.jem/bin:$PATH"`,
-			`export JAVA_HOME="$HOME/.jem/jdks/current"`,
+			"# jem initialization",
+			`eval "$(jem init)"`,
 		}
-	case config.Shell("powershell"):
+	case config.ShellPowerShell:
 		lines = []string{
 			"",
-			"# jem configuration",
-			`$env:PATH = "$HOME\.jem\bin;$env:PATH"`,
-			`$env:JAVA_HOME = "$HOME\.jem\jdks\current"`,
+			"# jem initialization",
+			`jem init | Invoke-Expression`,
 		}
 	}
 

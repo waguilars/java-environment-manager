@@ -93,3 +93,70 @@ func TestDetectSystemGradle_NonExistentPath(t *testing.T) {
 		t.Errorf("Expected nil for non-existent path, got %+v", result)
 	}
 }
+
+func TestDetectActualJavaVersion(t *testing.T) {
+	// This test may not work in CI if java is not installed
+	// Just verify the function doesn't panic
+	_ = detectActualJavaVersion()
+}
+
+func TestParseJavaVersion(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "OpenJDK format",
+			input:    "openjdk version \"21.0.2\" 2024-01-16 LTS",
+			expected: "21.0.2",
+		},
+		{
+			name:     "Oracle JDK format",
+			input:    "java version \"17.0.8\" 2023-07-18 LTS",
+			expected: "17.0.8",
+		},
+		{
+			name:     "No quotes",
+			input:    "some random output",
+			expected: "",
+		},
+		{
+			name:     "Empty string",
+			input:    "",
+			expected: "",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := parseJavaVersion(tc.input)
+			if result != tc.expected {
+				t.Errorf("parseJavaVersion(%q) = %q, want %q", tc.input, result, tc.expected)
+			}
+		})
+	}
+}
+
+func TestExtractMajorVersion(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"21.0.2", "21"},
+		{"17.0.8", "17"},
+		{"11", "11"},
+		{"8", "8"},
+		{"temurin-21.0.2", "21"},
+		{"openjdk-17.0.5", "17"},
+		{"", ""},
+		{"abc", ""},
+	}
+
+	for _, tc := range tests {
+		result := extractMajorVersion(tc.input)
+		if result != tc.expected {
+			t.Errorf("extractMajorVersion(%q) = %q, want %q", tc.input, result, tc.expected)
+		}
+	}
+}

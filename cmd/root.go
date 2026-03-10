@@ -82,7 +82,9 @@ Supports Windows and Linux with automatic platform detection.`,
 	rootCmd.AddCommand(useCommand())
 	rootCmd.AddCommand(installCommand())
 	rootCmd.AddCommand(importCommand())
+	rootCmd.AddCommand(doctorCommand())
 	rootCmd.AddCommand(tuiCommand())
+	rootCmd.AddCommand(initCommand())
 
 	return rootCmd
 }
@@ -241,24 +243,36 @@ func useCommand() *cobra.Command {
 		Short: "Switch to a different version",
 		Long: `Switch to a different JDK or Gradle version.
 
-You can use either an installed version or a detected one (it will be automatically imported).`,
+You can use either an installed version or a detected one (it will be automatically imported).
+
+Examples:
+  # Session mode - output environment variables
+  jem use jdk 21 --output-env
+  eval "$(jem use jdk 21 --output-env)"
+
+  # Default mode - update config and symlinks
+  jem use jdk 21 --default
+  jem use default jdk 21`,
 	}
 
 	// Add subcommands
 	cmd.AddCommand(useJDKCommand())
 	cmd.AddCommand(useGradleCommand())
+	cmd.AddCommand(useDefaultCommand())
 
 	return cmd
 }
 
 // useJDKCommand creates the 'use jdk' subcommand
 func useJDKCommand() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "jdk <version>",
 		Short: "Switch to a different JDK version",
 		Long: `Switch to a different JDK version.
 
-You can use either an installed JDK or a detected one (it will be automatically imported).`,
+You can use either an installed JDK or a detected one (it will be automatically imported).
+Use --output-env to output environment variables for the current shell session.
+Use --default to set as the default JDK (updates config and symlinks).`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
@@ -272,19 +286,35 @@ You can use either an installed JDK or a detected one (it will be automatically 
 			}
 			useCmd := factory.CreateUseCommand()
 			useCmd.SetForce(getFlagBool(cmd, "force"))
-			return useCmd.ExecuteJDK(ctx, args[0])
+			useCmd.SetOutputEnv(getFlagBool(cmd, "output-env"))
+
+			// Determine mode based on flags
+			mode := UseModeSession
+			if getFlagBool(cmd, "default") {
+				mode = UseModeDefault
+			}
+
+			return useCmd.ExecuteJDK(ctx, args[0], mode)
 		},
 	}
+
+	// Add flags
+	cmd.Flags().Bool("output-env", false, "Output environment variables for shell eval instead of updating symlinks")
+	cmd.Flags().Bool("default", false, "Set as default JDK (updates config and symlinks)")
+
+	return cmd
 }
 
 // useGradleCommand creates the 'use gradle' subcommand
 func useGradleCommand() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "gradle <version>",
 		Short: "Switch to a different Gradle version",
 		Long: `Switch to a different Gradle version.
 
-You can use either an installed Gradle or a detected one (it will be automatically imported).`,
+You can use either an installed Gradle or a detected one (it will be automatically imported).
+Use --output-env to output environment variables for the current shell session.
+Use --default to set as the default Gradle (updates config and symlinks).`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
@@ -298,7 +328,90 @@ You can use either an installed Gradle or a detected one (it will be automatical
 			}
 			useCmd := factory.CreateUseCommand()
 			useCmd.SetForce(getFlagBool(cmd, "force"))
-			return useCmd.ExecuteGradle(ctx, args[0])
+			useCmd.SetOutputEnv(getFlagBool(cmd, "output-env"))
+
+			// Determine mode based on flags
+			mode := UseModeSession
+			if getFlagBool(cmd, "default") {
+				mode = UseModeDefault
+			}
+
+			return useCmd.ExecuteGradle(ctx, args[0], mode)
+		},
+	}
+
+	// Add flags
+	cmd.Flags().Bool("output-env", false, "Output environment variables for shell eval instead of updating symlinks")
+	cmd.Flags().Bool("default", false, "Set as default Gradle (updates config and symlinks)")
+
+	return cmd
+}
+
+// useDefaultCommand creates the 'use default' subcommand
+func useDefaultCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "default",
+		Short: "Set default JDK or Gradle version",
+		Long: `Set the default JDK or Gradle version.
+
+This updates the configuration and symlinks to make the specified version the default.`,
+	}
+
+	// Add subcommands
+	cmd.AddCommand(useDefaultJDKCommand())
+	cmd.AddCommand(useDefaultGradleCommand())
+
+	return cmd
+}
+
+// useDefaultJDKCommand creates the 'use default jdk' subcommand
+func useDefaultJDKCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "jdk <version>",
+		Short: "Set the default JDK version",
+		Long: `Set the default JDK version.
+
+This updates the configuration and symlinks to make the specified JDK the default.`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			factory, ok := ctx.Value("factory").(*CommandFactory)
+			if !ok || factory == nil {
+				var err error
+				factory, err = NewCommandFactory()
+				if err != nil {
+					return err
+				}
+			}
+			useCmd := factory.CreateUseCommand()
+			useCmd.SetForce(getFlagBool(cmd, "force"))
+			return useCmd.ExecuteJDK(ctx, args[0], UseModeDefault)
+		},
+	}
+}
+
+// useDefaultGradleCommand creates the 'use default gradle' subcommand
+func useDefaultGradleCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "gradle <version>",
+		Short: "Set the default Gradle version",
+		Long: `Set the default Gradle version.
+
+This updates the configuration and symlinks to make the specified Gradle the default.`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			factory, ok := ctx.Value("factory").(*CommandFactory)
+			if !ok || factory == nil {
+				var err error
+				factory, err = NewCommandFactory()
+				if err != nil {
+					return err
+				}
+			}
+			useCmd := factory.CreateUseCommand()
+			useCmd.SetForce(getFlagBool(cmd, "force"))
+			return useCmd.ExecuteGradle(ctx, args[0], UseModeDefault)
 		},
 	}
 }
@@ -470,6 +583,37 @@ Examples:
 	}
 }
 
+// doctorCommand creates the doctor subcommand
+func doctorCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "doctor",
+		Short: "Diagnose jem environment issues",
+		Long: `Run diagnostics to check the jem environment for common issues.
+
+Checks include:
+  - Current JDK symlink validity
+  - Bin directory existence and contents
+  - PATH configuration
+  - Version consistency between config and actual Java`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			factory, ok := ctx.Value("factory").(*CommandFactory)
+			if !ok || factory == nil {
+				var err error
+				factory, err = NewCommandFactory()
+				if err != nil {
+					return err
+				}
+			}
+			exitCode := factory.CreateDoctorCommand().Execute()
+			if exitCode != 0 {
+				os.Exit(exitCode)
+			}
+			return nil
+		},
+	}
+}
+
 // tuiCommand creates the tui subcommand
 func tuiCommand() *cobra.Command {
 	return &cobra.Command{
@@ -490,4 +634,37 @@ func tuiCommand() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+// initCommand creates the init subcommand
+func initCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "init [shell]",
+		Short: "Initialize shell environment for jem",
+		Long: `Initialize the shell environment for jem.
+
+Outputs shell commands to set up JAVA_HOME, GRADLE_HOME, and PATH.
+Run this in your shell with: eval "$(jem init)"
+
+Supported shells: bash, zsh, powershell, fish`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			factory, ok := ctx.Value("factory").(*CommandFactory)
+			if !ok || factory == nil {
+				var err error
+				factory, err = NewCommandFactory()
+				if err != nil {
+					return err
+				}
+			}
+
+			shell, _ := cmd.Flags().GetString("shell")
+			return factory.CreateInitCommand().Execute(ctx, shell)
+		},
+	}
+
+	// Add flags
+	cmd.Flags().String("shell", "", "Shell type (bash|zsh|powershell|fish)")
+
+	return cmd
 }

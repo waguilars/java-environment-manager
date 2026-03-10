@@ -69,13 +69,13 @@ func TestSetup_ConfigNotExists(t *testing.T) {
 		t.Error("Expected config.toml to be created")
 	}
 
-	// Verify shell config was created and contains jem configuration
+	// Verify shell config was created and contains jem init configuration
 	content, err := os.ReadFile(shellConfigPath)
 	if err != nil {
 		t.Errorf("Expected shell config to exist, got error: %v", err)
 	}
-	if !strings.Contains(string(content), ".jem/bin") {
-		t.Error("Expected shell config to contain '.jem/bin'")
+	if !strings.Contains(string(content), `eval "$(jem init)"`) {
+		t.Errorf("Expected shell config to contain 'eval \"$(jem init)\"', got:\n%s", string(content))
 	}
 }
 
@@ -109,13 +109,13 @@ func TestSetup_ConfigExists_ShellNotConfigured(t *testing.T) {
 		t.Errorf("Expected no error, got: %v", err)
 	}
 
-	// Verify shell config was created and contains jem configuration
+	// Verify shell config was created and contains jem init configuration
 	content, err := os.ReadFile(shellConfigPath)
 	if err != nil {
 		t.Errorf("Expected shell config to exist, got error: %v", err)
 	}
-	if !strings.Contains(string(content), ".jem/bin") {
-		t.Error("Expected shell config to contain '.jem/bin'")
+	if !strings.Contains(string(content), `eval "$(jem init)"`) {
+		t.Errorf("Expected shell config to contain 'eval \"$(jem init)\"', got:\n%s", string(content))
 	}
 }
 
@@ -131,8 +131,8 @@ func TestSetup_ConfigExists_ShellConfigured(t *testing.T) {
 	// Create existing config
 	os.WriteFile(configPath, []byte("[general]\ndefault_provider = 'temurin'\n"), 0644)
 
-	// Create shell config with jem already configured
-	originalContent := "# Existing config\nexport PATH=\"$HOME/.jem/bin:$PATH\"\n"
+	// Create shell config with jem already configured using new init pattern
+	originalContent := "# Existing config\neval \"$(jem init)\"\n"
 	os.WriteFile(shellConfigPath, []byte(originalContent), 0644)
 
 	repo := config.NewTOMLConfigRepository(configPath)
@@ -216,8 +216,8 @@ func TestSetup_ShellConfigSymlink(t *testing.T) {
 	if err != nil {
 		t.Errorf("Expected actual config to exist, got error: %v", err)
 	}
-	if !strings.Contains(string(content), ".jem/bin") {
-		t.Error("Expected actual config to contain '.jem/bin'")
+	if !strings.Contains(string(content), `eval "$(jem init)"`) {
+		t.Errorf("Expected actual config to contain 'eval \"$(jem init)\"', got:\n%s", string(content))
 	}
 }
 
@@ -277,13 +277,13 @@ func TestSetup_ShellConfigBackup(t *testing.T) {
 	}
 
 	// Verify jem config is present
-	if !strings.Contains(string(shellConfigContent), ".jem/bin") {
-		t.Error("Expected shell config to contain jem configuration")
+	if !strings.Contains(string(shellConfigContent), `eval "$(jem init)"`) {
+		t.Errorf("Expected shell config to contain 'eval \"$(jem init)\"', got:\n%s", string(shellConfigContent))
 	}
 
 	// Verify jem config appears AFTER original content
 	originalIdx := strings.Index(string(shellConfigContent), "# Existing bashrc")
-	jemIdx := strings.Index(string(shellConfigContent), "# jem configuration")
+	jemIdx := strings.Index(string(shellConfigContent), "# jem initialization")
 	if originalIdx >= jemIdx {
 		t.Error("Expected jem configuration to appear after original content")
 	}
@@ -389,7 +389,7 @@ func TestSetup_ShellConfigBackup_NoDataLoss(t *testing.T) {
 	finalLineCount := len(strings.Split(strings.TrimSuffix(string(finalContent), "\n"), "\n"))
 
 	// Verify line count increased (original + jem lines)
-	expectedAdditionalLines := 4 // jem adds 4 lines (empty + comment + 2 exports)
+	expectedAdditionalLines := 3 // jem adds 3 lines (empty + comment + jem init)
 	if finalLineCount != originalLineCount+expectedAdditionalLines {
 		t.Errorf("Expected %d lines, got %d", originalLineCount+expectedAdditionalLines, finalLineCount)
 	}
@@ -421,8 +421,8 @@ func TestSetup_ShellConfigNoBackup(t *testing.T) {
 	// Create existing config
 	os.WriteFile(configPath, []byte("[general]\ndefault_provider = 'temurin'\n"), 0644)
 
-	// Create shell config with jem already configured
-	os.WriteFile(shellConfigPath, []byte("export PATH=\"$HOME/.jem/bin:$PATH\"\n"), 0644)
+	// Create shell config with jem already configured using new pattern
+	os.WriteFile(shellConfigPath, []byte(`eval "$(jem init)"`+"\n"), 0644)
 
 	repo := config.NewTOMLConfigRepository(configPath)
 
@@ -528,11 +528,11 @@ func TestSetup_ShellConfigDirectoryError(t *testing.T) {
 	}
 }
 
-// TestIsShellConfigured_True verifies returns true when file contains .jem/bin
+// TestIsShellConfigured_True verifies returns true when file contains jem init pattern
 func TestIsShellConfigured_True(t *testing.T) {
 	tmpDir := t.TempDir()
 	shellConfigPath := filepath.Join(tmpDir, ".bashrc")
-	os.WriteFile(shellConfigPath, []byte("export PATH=\"$HOME/.jem/bin:$PATH\"\n"), 0644)
+	os.WriteFile(shellConfigPath, []byte(`eval "$(jem init)"`+"\n"), 0644)
 
 	cmd := &SetupCommand{
 		platform:   &MockPlatformForSetup{},
@@ -545,7 +545,24 @@ func TestIsShellConfigured_True(t *testing.T) {
 	}
 }
 
-// TestIsShellConfigured_False verifies returns false when file does not contain .jem/bin
+// TestIsShellConfigured_True_InvokeExpression verifies returns true when PowerShell config contains jem init
+func TestIsShellConfigured_True_InvokeExpression(t *testing.T) {
+	tmpDir := t.TempDir()
+	shellConfigPath := filepath.Join(tmpDir, "Microsoft.PowerShell_profile.ps1")
+	os.WriteFile(shellConfigPath, []byte("jem init | Invoke-Expression\n"), 0644)
+
+	cmd := &SetupCommand{
+		platform:   &MockPlatformForSetup{},
+		configRepo: nil,
+	}
+
+	result := cmd.isShellConfigured(shellConfigPath)
+	if !result {
+		t.Error("Expected isShellConfigured to return true for PowerShell")
+	}
+}
+
+// TestIsShellConfigured_False verifies returns false when file does not contain jem init
 func TestIsShellConfigured_False(t *testing.T) {
 	tmpDir := t.TempDir()
 	shellConfigPath := filepath.Join(tmpDir, ".bashrc")
@@ -577,7 +594,7 @@ func TestIsShellConfigured_FileNotExists(t *testing.T) {
 	}
 }
 
-// TestConfigureShell_Bash verifies correct PATH export for bash
+// TestConfigureShell_Bash verifies correct jem init for bash
 func TestConfigureShell_Bash(t *testing.T) {
 	tmpDir := t.TempDir()
 	shellConfigPath := filepath.Join(tmpDir, ".bashrc")
@@ -597,13 +614,14 @@ func TestConfigureShell_Bash(t *testing.T) {
 		t.Errorf("Expected shell config to exist, got error: %v", err)
 	}
 
-	expected := `export PATH="$HOME/.jem/bin:$PATH"`
+	// Should contain jem init pattern
+	expected := `eval "$(jem init)"`
 	if !strings.Contains(string(content), expected) {
 		t.Errorf("Expected shell config to contain '%s', got:\n%s", expected, string(content))
 	}
 }
 
-// TestConfigureShell_Zsh verifies correct PATH export for zsh
+// TestConfigureShell_Zsh verifies correct jem init for zsh
 func TestConfigureShell_Zsh(t *testing.T) {
 	tmpDir := t.TempDir()
 	shellConfigPath := filepath.Join(tmpDir, ".zshrc")
@@ -623,13 +641,14 @@ func TestConfigureShell_Zsh(t *testing.T) {
 		t.Errorf("Expected shell config to exist, got error: %v", err)
 	}
 
-	expected := `export PATH="$HOME/.jem/bin:$PATH"`
+	// Should contain jem init pattern
+	expected := `eval "$(jem init)"`
 	if !strings.Contains(string(content), expected) {
 		t.Errorf("Expected shell config to contain '%s', got:\n%s", expected, string(content))
 	}
 }
 
-// TestConfigureShell_PowerShell verifies correct PATH export for PowerShell
+// TestConfigureShell_PowerShell verifies correct jem init for PowerShell
 func TestConfigureShell_PowerShell(t *testing.T) {
 	tmpDir := t.TempDir()
 	shellConfigPath := filepath.Join(tmpDir, "Microsoft.PowerShell_profile.ps1")
@@ -649,8 +668,31 @@ func TestConfigureShell_PowerShell(t *testing.T) {
 		t.Errorf("Expected shell config to exist, got error: %v", err)
 	}
 
-	expected := `$env:PATH = "$HOME\.jem\bin;$env:PATH"`
+	// Should contain jem init | Invoke-Expression pattern
+	expected := "jem init | Invoke-Expression"
 	if !strings.Contains(string(content), expected) {
 		t.Errorf("Expected shell config to contain '%s', got:\n%s", expected, string(content))
+	}
+}
+
+// TestConfigureShell_Fish verifies Fish shell warning is shown
+func TestConfigureShell_Fish(t *testing.T) {
+	tmpDir := t.TempDir()
+	shellConfigPath := filepath.Join(tmpDir, ".config", "fish", "config.fish")
+
+	cmd := &SetupCommand{
+		platform:   &MockPlatformForSetup{},
+		configRepo: nil,
+	}
+
+	// Fish shell should not create a config file, just show warning
+	err := cmd.configureShell(config.ShellFish, shellConfigPath)
+	if err != nil {
+		t.Errorf("Expected no error, got: %v", err)
+	}
+
+	// Verify no shell config was created
+	if _, err := os.Stat(shellConfigPath); !os.IsNotExist(err) {
+		t.Error("Expected no shell config to be created for Fish")
 	}
 }

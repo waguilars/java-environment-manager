@@ -70,6 +70,21 @@ Download the latest release for your platform:
 
 ## Usage
 
+### Quick Start
+
+After installation, run the setup command to initialize jem:
+
+```bash
+# Initialize jem configuration and shell integration
+jem setup
+
+# Scan for existing JDKs and Gradles on your system
+jem scan
+
+# Add jem to your shell (if not done automatically)
+eval "$(jem init)"
+```
+
 ### First Time Setup
 
 ```bash
@@ -93,6 +108,28 @@ jem tui
 - `q` or `Ctrl+C` - Quit
 
 ### CLI Commands
+
+#### Initialize Shell (`jem init`)
+
+The `jem init` command generates shell initialization scripts and updates symlinks based on your default versions:
+
+```bash
+# Auto-detect shell and output initialization script
+eval "$(jem init)"
+
+# Specify shell explicitly
+eval "$(jem init bash)"
+eval "$(jem init zsh)"
+eval "$(jem init powershell)"
+
+# For PowerShell
+jem init powershell | Invoke-Expression
+```
+
+This command:
+- Creates/updates symlinks in `~/.jem/current/` based on your default versions
+- Outputs shell-specific environment variable exports
+- Should be added to your shell profile via `jem setup`
 
 #### List Available Versions
 
@@ -122,16 +159,51 @@ Gradle:  7.6.1 (/home/user/.jem/gradles/7.6.1) [jem]
 
 #### Switch Versions
 
+**Session Mode** (temporary, outputs env exports):
 ```bash
-# Switch JDK (imports automatically if detected but not managed)
-jem use jdk 17.0.7
+# Temporarily use a JDK for current shell session
+jem use jdk 17.0.7 --session
 
-# Switch Gradle
-jem use gradle 6.9.4
+# Temporarily use a Gradle for current shell session
+jem use gradle 8.5 --session
 
-# Skip confirmation prompt
+# Or use the --output-env flag
+jem use jdk 21.0.1 --output-env
+```
+
+**Default Mode** (persistent, updates symlinks and config):
+```bash
+# Set default JDK (updates symlinks and config)
+jem use jdk 21.0.1 --default
+
+# Set default Gradle
+jem use gradle 8.5 --default
+
+# These are equivalent (default mode is the default)
+jem use jdk 21.0.1
+```
+
+**Force Mode** (skip confirmation prompts):
+```bash
+# Skip confirmation prompt for imports
 jem use jdk 21.0.1 --force
 ```
+
+#### Set Default Versions
+
+You can also set the default version separately:
+
+```bash
+# Set default JDK version
+jem use default jdk 21.0.1
+
+# Set default Gradle version
+jem use default gradle 8.5
+```
+
+This updates:
+- The `[defaults]` section in `~/.jem/config.toml`
+- The symlinks in `~/.jem/current/`
 
 #### Scan System
 
@@ -216,6 +288,10 @@ jem stores configuration in `~/.jem/config.toml`:
 [general]
   default_provider = "temurin"
 
+[defaults]
+  jdk = "21.0.1"
+  gradle = "8.5"
+
 [jdk]
   current = "21.0.1"
 
@@ -230,11 +306,20 @@ jem stores configuration in `~/.jem/config.toml`:
     managed = true
 
 ["gradles.installed"]
-  ["gradles.installed"."/home/user/.jem/gradles/7.6.1"]
-    path = "/home/user/.jem/gradles/7.6.1"
-    version = "7.6.1"
+  ["gradles.installed"."/home/user/.jem/gradles/8.5"]
+    path = "/home/user/.jem/gradles/8.5"
+    version = "8.5"
     managed = true
 ```
+
+### Configuration Sections
+
+- **`[general]`** - General settings like default provider
+- **`[defaults]`** - Default JDK and Gradle versions (used by `jem init`)
+- **`[jdk]`** - Current JDK (deprecated, use `[defaults]`)
+- **`[gradle]`** - Current Gradle (deprecated, use `[defaults]`)
+- **`["jdks.installed"]`** - Installed JDKs managed by jem
+- **`["gradles.installed"]`** - Installed Gradles managed by jem
 
 ## Directory Structure
 
@@ -242,15 +327,20 @@ jem stores configuration in `~/.jem/config.toml`:
 ~/.jem/
 ├── bin/                    # Symlinks to current JDK/Gradle executables
 │   └── java -> ../jdks/current/bin/java
+├── current/                # Symlinks to default JDK/Gradle versions (updated by jem init)
+│   ├── java -> ../jdks/temurin-21
+│   └── gradle -> ../gradles/8.5
 ├── jdks/                   # JDK installations (symlinks to imported)
 │   ├── 21-amzn/
 │   ├── 17.0.7-tem/
-│   └── current -> 21-amzn/
+│   └── current -> 21-amzn/  # (legacy, use ../current/java)
 ├── gradles/                # Gradle installations
 │   ├── 7.6.1/
-│   └── current -> 7.6.1/
+│   └── current -> 7.6.1/    # (legacy, use ../current/gradle)
 └── config.toml             # Configuration file
 ```
+
+**Important:** The `~/.jem/current/` directory contains symlinks that are updated by `jem init` based on your `[defaults]` configuration. These are used to set up your shell environment.
 
 ## Development
 
@@ -307,6 +397,61 @@ goreleaser release --snapshot --clean
 ```
 
 See [CHANGELOG.md](CHANGELOG.md) for version history.
+
+## Migration Guide
+
+### Upgrading to v0.4.0+ (Session vs Default Mode)
+
+Starting with v0.4.0, jem introduces a clearer distinction between **session** and **default** versions:
+
+#### Breaking Changes
+
+- **New `[defaults]` configuration section**: Default versions are now stored separately from the current session
+- **`jem init` command**: New command for shell initialization that reads from `[defaults]`
+- **Symlink structure**: Current symlinks moved from `~/.jem/jdks/current` to `~/.jem/current/java`
+
+#### Migration Steps
+
+1. **Run `jem setup`** to update your shell configuration:
+   ```bash
+   jem setup
+   ```
+   This will:
+   - Add `eval "$(jem init)"` to your shell profile
+   - Migrate old config format to new format
+   - Update symlinks
+
+2. **Update your shell profile** (if not done automatically):
+   ```bash
+   # Add to ~/.bashrc, ~/.zshrc, or PowerShell profile
+   eval "$(jem init)"
+   ```
+
+3. **Set your default versions**:
+   ```bash
+   # View current defaults
+   jem current
+
+   # Set new defaults if needed
+   jem use default jdk 21.0.1
+   jem use default gradle 8.5
+   ```
+
+#### Old vs New Behavior
+
+| Old Behavior (pre-0.4.0) | New Behavior (0.4.0+) |
+|-------------------------|----------------------|
+| `jem use jdk 21` changed default | `jem use jdk 21` still changes default |
+| No session mode | `jem use jdk 21 --session` for temporary use |
+| `jem setup` managed PATH | `jem init` generates shell script |
+| Symlinks in `jdks/current/` | Symlinks in `current/java` |
+| Config had `[jdk]` and `[gradle]` | Config has `[defaults]` section |
+
+#### Backward Compatibility
+
+- Old `jdk.current` and `gradle.current` values are automatically migrated to `[defaults]`
+- Legacy symlinks in `jdks/current/` remain functional
+- All existing installed JDKs and Gradles are preserved
 
 ## Contributing
 

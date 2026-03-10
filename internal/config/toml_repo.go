@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -58,6 +59,13 @@ func (r *TOMLConfigRepository) Load() (*Config, error) {
 	}
 	if r.config.DetectedGradles == nil {
 		r.config.DetectedGradles = make(map[string]GradleInfo)
+	}
+
+	// Run migration for old config format (jdk.current -> defaults.jdk, etc.)
+	jemDir := filepath.Dir(r.configPath)
+	if err := MigrateCurrentToDefaults(r.config, jemDir); err != nil {
+		// Log error but don't fail - migration is best-effort
+		fmt.Fprintf(os.Stderr, "Warning: config migration failed: %v\n", err)
 	}
 
 	return r.config, nil
@@ -245,6 +253,28 @@ func (r *TOMLConfigRepository) ClearDetectedGradles() error {
 	return r.Save(r.config)
 }
 
+// GetDefaultJDK returns the default JDK version
+func (r *TOMLConfigRepository) GetDefaultJDK() string {
+	return r.config.Defaults.JDK
+}
+
+// SetDefaultJDK sets the default JDK version
+func (r *TOMLConfigRepository) SetDefaultJDK(version string) error {
+	r.config.Defaults.JDK = version
+	return r.Save(r.config)
+}
+
+// GetDefaultGradle returns the default Gradle version
+func (r *TOMLConfigRepository) GetDefaultGradle() string {
+	return r.config.Defaults.Gradle
+}
+
+// SetDefaultGradle sets the default Gradle version
+func (r *TOMLConfigRepository) SetDefaultGradle(version string) error {
+	r.config.Defaults.Gradle = version
+	return r.Save(r.config)
+}
+
 // getDefaultConfig returns a default configuration
 func (r *TOMLConfigRepository) getDefaultConfig() *Config {
 	return &Config{
@@ -256,6 +286,10 @@ func (r *TOMLConfigRepository) getDefaultConfig() *Config {
 		},
 		Gradle: GradleConfig{
 			Current: "",
+		},
+		Defaults: DefaultsConfig{
+			JDK:    "",
+			Gradle: "",
 		},
 		InstalledJDKs:    make(map[string]JDKInfo),
 		DetectedJDKs:     make(map[string]JDKInfo),

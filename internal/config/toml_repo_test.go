@@ -672,6 +672,104 @@ func TestTOMLConfigRepository_ClearDetectedGradles(t *testing.T) {
 	}
 }
 
+func TestTOMLConfigRepository_GetDefaultJDK(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	repo := NewTOMLConfigRepository(configPath)
+
+	// Test with empty config
+	defaultJDK := repo.GetDefaultJDK()
+	if defaultJDK != "" {
+		t.Errorf("Expected empty default JDK, got '%s'", defaultJDK)
+	}
+
+	// Test with config that has default JDK
+	config := &Config{
+		Defaults: DefaultsConfig{
+			JDK: "temurin-21",
+		},
+	}
+	repo.config = config
+
+	defaultJDK = repo.GetDefaultJDK()
+	if defaultJDK != "temurin-21" {
+		t.Errorf("Expected default JDK to be 'temurin-21', got '%s'", defaultJDK)
+	}
+}
+
+func TestTOMLConfigRepository_SetDefaultJDK(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	repo := NewTOMLConfigRepository(configPath)
+
+	err := repo.SetDefaultJDK("temurin-21")
+	if err != nil {
+		t.Fatalf("SetDefaultJDK() should not error: %v", err)
+	}
+
+	// Verify it was saved
+	repo2 := NewTOMLConfigRepository(configPath)
+	loadedConfig, err := repo2.Load()
+	if err != nil {
+		t.Fatalf("Failed to reload config: %v", err)
+	}
+
+	if loadedConfig.Defaults.JDK != "temurin-21" {
+		t.Errorf("Expected Defaults.JDK to be 'temurin-21', got '%s'", loadedConfig.Defaults.JDK)
+	}
+}
+
+func TestTOMLConfigRepository_GetDefaultGradle(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	repo := NewTOMLConfigRepository(configPath)
+
+	// Test with empty config
+	defaultGradle := repo.GetDefaultGradle()
+	if defaultGradle != "" {
+		t.Errorf("Expected empty default Gradle, got '%s'", defaultGradle)
+	}
+
+	// Test with config that has default Gradle
+	config := &Config{
+		Defaults: DefaultsConfig{
+			Gradle: "gradle-8.5",
+		},
+	}
+	repo.config = config
+
+	defaultGradle = repo.GetDefaultGradle()
+	if defaultGradle != "gradle-8.5" {
+		t.Errorf("Expected default Gradle to be 'gradle-8.5', got '%s'", defaultGradle)
+	}
+}
+
+func TestTOMLConfigRepository_SetDefaultGradle(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	repo := NewTOMLConfigRepository(configPath)
+
+	err := repo.SetDefaultGradle("gradle-8.5")
+	if err != nil {
+		t.Fatalf("SetDefaultGradle() should not error: %v", err)
+	}
+
+	// Verify it was saved
+	repo2 := NewTOMLConfigRepository(configPath)
+	loadedConfig, err := repo2.Load()
+	if err != nil {
+		t.Fatalf("Failed to reload config: %v", err)
+	}
+
+	if loadedConfig.Defaults.Gradle != "gradle-8.5" {
+		t.Errorf("Expected Defaults.Gradle to be 'gradle-8.5', got '%s'", loadedConfig.Defaults.Gradle)
+	}
+}
+
 func TestTOMLConfigRepository_Reload(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.toml")

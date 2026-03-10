@@ -5,6 +5,7 @@ type Config struct {
 	General          GeneralConfig         `toml:"general"`
 	JDK              JDKConfig             `toml:"jdk"`
 	Gradle           GradleConfig          `toml:"gradle"`
+	Defaults         DefaultsConfig        `toml:"defaults"`
 	InstalledJDKs    map[string]JDKInfo    `toml:"jdks.installed"`
 	DetectedJDKs     map[string]JDKInfo    `toml:"jdks.detected"`
 	InstalledGradles map[string]GradleInfo `toml:"gradles.installed"`
@@ -41,6 +42,20 @@ type GradleInfo struct {
 	Managed bool   `toml:"managed"` // true if installed by jem
 }
 
+// DefaultsConfig contains default version settings
+type DefaultsConfig struct {
+	JDK    string `toml:"jdk"`
+	Gradle string `toml:"gradle"`
+}
+
+// UseMode represents the mode for version selection
+type UseMode string
+
+const (
+	UseModeSession UseMode = "session"
+	UseModeDefault UseMode = "default"
+)
+
 // Shell represents the shell type
 type Shell string
 
@@ -48,4 +63,5 @@ const (
 	ShellBash       Shell = "bash"
 	ShellZsh        Shell = "zsh"
 	ShellPowerShell Shell = "powershell"
+	ShellFish       Shell = "fish"
 )

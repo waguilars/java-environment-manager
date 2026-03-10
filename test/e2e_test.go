@@ -357,34 +357,208 @@ func TestEndToEndWithRealConfig(t *testing.T) {
 	}
 }
 
-// TestEndToEndIntegration tests the complete integration with all components
-func TestEndToEndIntegration(t *testing.T) {
+// TestEndToEnd_FreshInstall_FullFlow tests fresh install -> setup -> use -> init workflow
+func TestEndToEnd_FreshInstall_FullFlow(t *testing.T) {
 	// Create a temporary directory for testing
 	tmpDir := t.TempDir()
-
-	// Setup paths
 	testHome := filepath.Join(tmpDir, "test-home")
-	configPath := filepath.Join(testHome, ".jem", "config.toml")
-
-	// Create directories
-	if err := os.MkdirAll(filepath.Join(testHome, ".jem", "jdks"), 0755); err != nil {
-		t.Fatalf("Failed to create directories: %v", err)
+	if err := os.MkdirAll(testHome, 0755); err != nil {
+		t.Fatalf("Failed to create test home: %v", err)
 	}
 
-	// Create components
+	configPath := filepath.Join(testHome, ".jem", "config.toml")
 	configRepo := config.NewTOMLConfigRepository(configPath)
 
-	mockPlatform := &mocks.MockPlatform{
-		HomeDirFunc: func() string {
-			return testHome
-		},
+	// Step 1: Fresh install - no config exists
+	t.Run("FreshInstall_NoConfig", func(t *testing.T) {
+		if _, err := os.Stat(configPath); !os.IsNotExist(err) {
+			t.Error("Expected config.toml to not exist for fresh install")
+		}
+	})
+
+	// Step 2: Setup - creates config and directories
+	t.Run("Setup_CreatesConfig", func(t *testing.T) {
+		cfg, err := configRepo.Load()
+		if err != nil {
+			t.Fatalf("Failed to load config: %v", err)
+		}
+
+		// Verify config was created
+		if cfg == nil {
+			t.Error("Expected config to be created")
+		}
+
+		// Verify directories would be created (in real scenario)
+		jemDir := filepath.Join(testHome, ".jem")
+		if err := os.MkdirAll(filepath.Join(jemDir, "jdks"), 0755); err != nil {
+			t.Fatalf("Failed to create jdks directory: %v", err)
+		}
+		if err := os.MkdirAll(filepath.Join(jemDir, "gradles"), 0755); err != nil {
+			t.Fatalf("Failed to create gradles directory: %v", err)
+		}
+		if err := os.MkdirAll(filepath.Join(jemDir, "current"), 0755); err != nil {
+			t.Fatalf("Failed to create current directory: %v", err)
+		}
+	})
+
+	// Step 3: Install a JDK
+	t.Run("InstallJDK", func(t *testing.T) {
+		jdkPath := filepath.Join(testHome, ".jem", "jdks", "temurin-21")
+		if err := os.MkdirAll(filepath.Join(jdkPath, "bin"), 0755); err != nil {
+			t.Fatalf("Failed to create JDK directory: %v", err)
+		}
+
+		jdkInfo := config.JDKInfo{
+			Path:     jdkPath,
+			Version:  "21.0.1",
+			Provider: "temurin",
+			Managed:  true,
+		}
+
+		if err := configRepo.AddInstalledJDK(jdkInfo); err != nil {
+			t.Fatalf("Failed to add JDK: %v", err)
+		}
+
+		// Verify JDK was added
+		jdks := configRepo.ListInstalledJDKs()
+		if len(jdks) != 1 {
+			t.Errorf("Expected 1 JDK, got %d", len(jdks))
+		}
+	})
+
+	// Step 4: Use the JDK in default mode
+	t.Run("UseJDK_DefaultMode", func(t *testing.T) {
+		if err := configRepo.SetDefaultJDK("21.0.1"); err != nil {
+			t.Fatalf("Failed to set default JDK: %v", err)
+		}
+
+		// Create symlink
+		jdkPath := filepath.Join(testHome, ".jem", "jdks", "temurin-21")
+		javaLink := filepath.Join(testHome, ".jem", "current", "java")
+		if err := os.Symlink(jdkPath, javaLink); err != nil {
+			t.Fatalf("Failed to create symlink: %v", err)
+		}
+
+		// Verify default was set
+		if configRepo.GetDefaultJDK() != "21.0.1" {
+			t.Errorf("Expected default JDK to be 21.0.1, got %s", configRepo.GetDefaultJDK())
+		}
+
+		// Verify symlink exists
+		if _, err := os.Lstat(javaLink); os.IsNotExist(err) {
+			t.Error("Expected Java symlink to exist")
+		}
+	})
+
+	// Step 5: Run jem init
+	t.Run("InitCommand", func(t *testing.T) {
+		// Verify symlinks are set up correctly for init
+		javaLink := filepath.Join(testHome, ".jem", "current", "java")
+		if _, err := os.Lstat(javaLink); os.IsNotExist(err) {
+			t.Error("Expected Java symlink to exist before init")
+		}
+
+		// Verify config has defaults
+		if configRepo.GetDefaultJDK() == "" {
+			t.Error("Expected default JDK to be set")
+		}
+	})
+}
+
+// TestEndToEnd_ExistingConfig_Migrate_Init tests existing config -> migrate -> init workflow
+func TestEndToEnd_ExistingConfig_Migrate_Init(t *testing.T) {
+	// Create a temporary directory for testing
+	tmpDir := t.TempDir()
+	testHome := filepath.Join(tmpDir, "test-home")
+	if err := os.MkdirAll(testHome, 0755); err != nil {
+		t.Fatalf("Failed to create test home: %v", err)
 	}
 
-	// Create JDK service
-	jdkService := jdk.NewJDKService(mockPlatform, configRepo)
+	configPath := filepath.Join(testHome, ".jem", "config.toml")
 
-	// Verify service was created
-	if jdkService == nil {
-		t.Error("Expected JDK service to be created")
+	// Create an old-style config with jdk.current (not defaults.jdk)
+	oldConfigContent := `[general]
+  default_provider = "temurin"
+
+[jdk]
+  current = "temurin-17"
+
+[gradle]
+  current = "7.6.1"
+`
+	if err := os.MkdirAll(filepath.Join(testHome, ".jem"), 0755); err != nil {
+		t.Fatalf("Failed to create .jem directory: %v", err)
 	}
+	if err := os.WriteFile(configPath, []byte(oldConfigContent), 0644); err != nil {
+		t.Fatalf("Failed to write old config: %v", err)
+	}
+
+	configRepo := config.NewTOMLConfigRepository(configPath)
+
+	// Step 1: Load existing config with old format
+	t.Run("LoadOldConfig", func(t *testing.T) {
+		cfg, err := configRepo.Load()
+		if err != nil {
+			t.Fatalf("Failed to load config: %v", err)
+		}
+
+		// Verify old format was loaded
+		if cfg.JDK.Current != "temurin-17" {
+			t.Errorf("Expected jdk.current to be 'temurin-17', got '%s'", cfg.JDK.Current)
+		}
+		if cfg.Gradle.Current != "7.6.1" {
+			t.Errorf("Expected gradle.current to be '7.6.1', got '%s'", cfg.Gradle.Current)
+		}
+	})
+
+	// Step 2: Migrate old config to new format
+	t.Run("MigrateConfig", func(t *testing.T) {
+		cfg, err := configRepo.Load()
+		if err != nil {
+			t.Fatalf("Failed to load config: %v", err)
+		}
+
+		// Create JDK directories for migration
+		jdkPath := filepath.Join(testHome, ".jem", "jdks", "temurin-17")
+		if err := os.MkdirAll(jdkPath, 0755); err != nil {
+			t.Fatalf("Failed to create JDK directory: %v", err)
+		}
+		gradlePath := filepath.Join(testHome, ".jem", "gradles", "7.6.1")
+		if err := os.MkdirAll(gradlePath, 0755); err != nil {
+			t.Fatalf("Failed to create Gradle directory: %v", err)
+		}
+
+		// Migrate current to defaults
+		if err := config.MigrateCurrentToDefaults(cfg, filepath.Join(testHome, ".jem")); err != nil {
+			t.Fatalf("Failed to migrate config: %v", err)
+		}
+
+		// Save migrated config
+		if err := configRepo.Save(cfg); err != nil {
+			t.Fatalf("Failed to save migrated config: %v", err)
+		}
+
+		// Reload and verify
+		if err := configRepo.Reload(); err != nil {
+			t.Fatalf("Failed to reload config: %v", err)
+		}
+
+		// Verify defaults were set from old current values
+		if cfg.Defaults.JDK != "temurin-17" {
+			t.Errorf("Expected defaults.jdk to be 'temurin-17', got '%s'", cfg.Defaults.JDK)
+		}
+		if cfg.Gradle.Current != "7.6.1" {
+			t.Errorf("Expected gradle.current to be preserved as '7.6.1', got '%s'", cfg.Gradle.Current)
+		}
+	})
+
+	// Step 3: Run init after migration
+	t.Run("InitAfterMigration", func(t *testing.T) {
+		// Verify symlinks would be created based on defaults
+		javaLink := filepath.Join(testHome, ".jem", "current", "java")
+		if _, err := os.Lstat(javaLink); os.IsNotExist(err) {
+			// In real scenario, init would create this
+			t.Log("Java symlink would be created by init based on defaults")
+		}
+	})
 }

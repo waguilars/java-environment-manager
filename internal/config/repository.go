@@ -29,4 +29,10 @@ type ConfigRepository interface {
 	RemoveInstalledGradle(name string) error
 	AddDetectedGradle(info GradleInfo) error
 	ClearDetectedGradles() error
+
+	// Default version operations
+	GetDefaultJDK() string
+	SetDefaultJDK(version string) error
+	GetDefaultGradle() string
+	SetDefaultGradle(version string) error
 }

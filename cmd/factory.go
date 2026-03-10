@@ -9,14 +9,16 @@ import (
 	"github.com/waguilars/java-environment-manager/internal/config"
 	"github.com/waguilars/java-environment-manager/internal/jdk"
 	"github.com/waguilars/java-environment-manager/internal/platform"
+	"github.com/waguilars/java-environment-manager/internal/symlink"
 )
 
 // CommandFactory creates and wires up command instances with dependencies
 type CommandFactory struct {
-	ctx        context.Context
-	platform   platform.Platform
-	configRepo config.ConfigRepository
-	jdkService *jdk.JDKService
+	ctx            context.Context
+	platform       platform.Platform
+	configRepo     config.ConfigRepository
+	jdkService     *jdk.JDKService
+	symlinkManager *symlink.SymlinkManager
 }
 
 // NewCommandFactory creates a new factory instance
@@ -38,11 +40,15 @@ func NewCommandFactory() (*CommandFactory, error) {
 	// Create JDK service with dependencies
 	jdkService := jdk.NewJDKService(plat, configRepo)
 
+	// Create symlink manager
+	symlinkManager := symlink.NewSymlinkManager(plat)
+
 	return &CommandFactory{
-		ctx:        context.Background(),
-		platform:   plat,
-		configRepo: configRepo,
-		jdkService: jdkService,
+		ctx:            context.Background(),
+		platform:       plat,
+		configRepo:     configRepo,
+		jdkService:     jdkService,
+		symlinkManager: symlinkManager,
 	}, nil
 }
 
@@ -79,12 +85,14 @@ func (f *CommandFactory) CreateCurrentCommand() *CurrentCommand {
 
 // CreateUseCommand creates a use command instance
 func (f *CommandFactory) CreateUseCommand() *UseCommand {
-	return &UseCommand{
+	cmd := &UseCommand{
 		platform:   f.platform,
 		configRepo: f.configRepo,
 		jdkService: f.jdkService,
 		prompter:   &SurveyPrompter{},
 	}
+	cmd.SetSymlinkManager(f.symlinkManager)
+	return cmd
 }
 
 // CreateInstallCommand creates an install command instance
@@ -112,6 +120,19 @@ func (f *CommandFactory) CreateImportGradleCommand() *ImportCommand {
 		configRepo: f.configRepo,
 		jdkService: f.jdkService,
 	}
+}
+
+// CreateDoctorCommand creates a doctor command instance
+func (f *CommandFactory) CreateDoctorCommand() *DoctorCommand {
+	return &DoctorCommand{
+		platform:   f.platform,
+		configRepo: f.configRepo,
+	}
+}
+
+// CreateInitCommand creates an init command instance
+func (f *CommandFactory) CreateInitCommand() *InitCommand {
+	return NewInitCommand(f.platform, f.configRepo)
 }
 
 // Context returns the command context
