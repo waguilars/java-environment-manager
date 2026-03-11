@@ -131,8 +131,21 @@ func TestSetup_ConfigExists_ShellConfigured(t *testing.T) {
 	// Create existing config
 	os.WriteFile(configPath, []byte("[general]\ndefault_provider = 'temurin'\n"), 0644)
 
-	// Create shell config with jem already configured using new init pattern
-	originalContent := "# Existing config\neval \"$(jem init)\"\n"
+	// Create shell config with jem already configured using new init pattern WITH wrapper
+	originalContent := `# Existing config
+jem() {
+    case "$1" in
+        use)
+            shift
+            eval "$(command jem use "$@" --output-env)"
+            ;;
+        *)
+            command jem "$@"
+            ;;
+    esac
+}
+eval "$(jem init)"
+`
 	os.WriteFile(shellConfigPath, []byte(originalContent), 0644)
 
 	repo := config.NewTOMLConfigRepository(configPath)
@@ -389,7 +402,7 @@ func TestSetup_ShellConfigBackup_NoDataLoss(t *testing.T) {
 	finalLineCount := len(strings.Split(strings.TrimSuffix(string(finalContent), "\n"), "\n"))
 
 	// Verify line count increased (original + jem lines)
-	expectedAdditionalLines := 3 // jem adds 3 lines (empty + comment + jem init)
+	expectedAdditionalLines := 14 // jem adds 14 lines (empty + comment + wrapper function + init)
 	if finalLineCount != originalLineCount+expectedAdditionalLines {
 		t.Errorf("Expected %d lines, got %d", originalLineCount+expectedAdditionalLines, finalLineCount)
 	}
@@ -421,8 +434,19 @@ func TestSetup_ShellConfigNoBackup(t *testing.T) {
 	// Create existing config
 	os.WriteFile(configPath, []byte("[general]\ndefault_provider = 'temurin'\n"), 0644)
 
-	// Create shell config with jem already configured using new pattern
-	os.WriteFile(shellConfigPath, []byte(`eval "$(jem init)"`+"\n"), 0644)
+	// Create shell config with jem already configured using new pattern WITH wrapper
+	os.WriteFile(shellConfigPath, []byte(`jem() {
+    case "$1" in
+        use)
+            shift
+            eval "$(command jem use "$@" --output-env)"
+            ;;
+        *)
+            command jem "$@"
+            ;;
+    esac
+}
+eval "$(jem init)"`+"\n"), 0644)
 
 	repo := config.NewTOMLConfigRepository(configPath)
 
@@ -528,11 +552,23 @@ func TestSetup_ShellConfigDirectoryError(t *testing.T) {
 	}
 }
 
-// TestIsShellConfigured_True verifies returns true when file contains jem init pattern
+// TestIsShellConfigured_True verifies returns true when file contains wrapper AND jem init pattern
 func TestIsShellConfigured_True(t *testing.T) {
 	tmpDir := t.TempDir()
 	shellConfigPath := filepath.Join(tmpDir, ".bashrc")
-	os.WriteFile(shellConfigPath, []byte(`eval "$(jem init)"`+"\n"), 0644)
+	os.WriteFile(shellConfigPath, []byte(`jem() {
+    case "$1" in
+        use)
+            shift
+            eval "$(command jem use "$@" --output-env)"
+            ;;
+        *)
+            command jem "$@"
+            ;;
+    esac
+}
+eval "$(jem init)"
+`), 0644)
 
 	cmd := &SetupCommand{
 		platform:   &MockPlatformForSetup{},
@@ -545,11 +581,25 @@ func TestIsShellConfigured_True(t *testing.T) {
 	}
 }
 
-// TestIsShellConfigured_True_InvokeExpression verifies returns true when PowerShell config contains jem init
+// TestIsShellConfigured_True_InvokeExpression verifies returns true when PowerShell config contains wrapper AND jem init
 func TestIsShellConfigured_True_InvokeExpression(t *testing.T) {
 	tmpDir := t.TempDir()
 	shellConfigPath := filepath.Join(tmpDir, "Microsoft.PowerShell_profile.ps1")
-	os.WriteFile(shellConfigPath, []byte("jem init | Invoke-Expression\n"), 0644)
+	os.WriteFile(shellConfigPath, []byte(`function jem {
+    param([Parameter(ValueFromRemainingArguments)]$Args)
+    if ($Args[0] -eq 'use') {
+        $output = & jem $Args --output-env 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            Invoke-Expression $output
+        } else {
+            Write-Host $output
+        }
+    } else {
+        & jem @Args
+    }
+}
+jem init | Invoke-Expression
+`), 0644)
 
 	cmd := &SetupCommand{
 		platform:   &MockPlatformForSetup{},
@@ -614,10 +664,24 @@ func TestConfigureShell_Bash(t *testing.T) {
 		t.Errorf("Expected shell config to exist, got error: %v", err)
 	}
 
+	contentStr := string(content)
+
+	// Should contain wrapper function
+	if !strings.Contains(contentStr, "jem() {") {
+		t.Errorf("Expected shell config to contain wrapper function, got:\n%s", contentStr)
+	}
+
 	// Should contain jem init pattern
 	expected := `eval "$(jem init)"`
-	if !strings.Contains(string(content), expected) {
-		t.Errorf("Expected shell config to contain '%s', got:\n%s", expected, string(content))
+	if !strings.Contains(contentStr, expected) {
+		t.Errorf("Expected shell config to contain '%s', got:\n%s", expected, contentStr)
+	}
+
+	// Verify wrapper comes BEFORE init
+	wrapperIdx := strings.Index(contentStr, "jem() {")
+	initIdx := strings.Index(contentStr, expected)
+	if wrapperIdx >= initIdx {
+		t.Error("Expected wrapper function to appear BEFORE init line")
 	}
 }
 
@@ -641,10 +705,24 @@ func TestConfigureShell_Zsh(t *testing.T) {
 		t.Errorf("Expected shell config to exist, got error: %v", err)
 	}
 
+	contentStr := string(content)
+
+	// Should contain wrapper function
+	if !strings.Contains(contentStr, "jem() {") {
+		t.Errorf("Expected shell config to contain wrapper function, got:\n%s", contentStr)
+	}
+
 	// Should contain jem init pattern
 	expected := `eval "$(jem init)"`
-	if !strings.Contains(string(content), expected) {
-		t.Errorf("Expected shell config to contain '%s', got:\n%s", expected, string(content))
+	if !strings.Contains(contentStr, expected) {
+		t.Errorf("Expected shell config to contain '%s', got:\n%s", expected, contentStr)
+	}
+
+	// Verify wrapper comes BEFORE init
+	wrapperIdx := strings.Index(contentStr, "jem() {")
+	initIdx := strings.Index(contentStr, expected)
+	if wrapperIdx >= initIdx {
+		t.Error("Expected wrapper function to appear BEFORE init line")
 	}
 }
 
@@ -668,10 +746,24 @@ func TestConfigureShell_PowerShell(t *testing.T) {
 		t.Errorf("Expected shell config to exist, got error: %v", err)
 	}
 
+	contentStr := string(content)
+
+	// Should contain wrapper function
+	if !strings.Contains(contentStr, "function jem {") {
+		t.Errorf("Expected shell config to contain wrapper function, got:\n%s", contentStr)
+	}
+
 	// Should contain jem init | Invoke-Expression pattern
 	expected := "jem init | Invoke-Expression"
-	if !strings.Contains(string(content), expected) {
-		t.Errorf("Expected shell config to contain '%s', got:\n%s", expected, string(content))
+	if !strings.Contains(contentStr, expected) {
+		t.Errorf("Expected shell config to contain '%s', got:\n%s", expected, contentStr)
+	}
+
+	// Verify wrapper comes BEFORE init
+	wrapperIdx := strings.Index(contentStr, "function jem {")
+	initIdx := strings.Index(contentStr, expected)
+	if wrapperIdx >= initIdx {
+		t.Error("Expected wrapper function to appear BEFORE init line")
 	}
 }
 
@@ -694,5 +786,313 @@ func TestConfigureShell_Fish(t *testing.T) {
 	// Verify no shell config was created
 	if _, err := os.Stat(shellConfigPath); !os.IsNotExist(err) {
 		t.Error("Expected no shell config to be created for Fish")
+	}
+}
+
+// Phase 4: New wrapper detection tests
+
+// TestIsShellConfigured_WithWrapper verifies returns true when wrapper AND init present
+func TestIsShellConfigured_WithWrapper(t *testing.T) {
+	tmpDir := t.TempDir()
+	shellConfigPath := filepath.Join(tmpDir, ".bashrc")
+	// Shell config with BOTH wrapper and init
+	content := `jem() {
+    case "$1" in
+        use)
+            shift
+            eval "$(command jem use "$@" --output-env)"
+            ;;
+        *)
+            command jem "$@"
+            ;;
+    esac
+}
+eval "$(jem init)"
+`
+	os.WriteFile(shellConfigPath, []byte(content), 0644)
+
+	cmd := &SetupCommand{
+		platform:   &MockPlatformForSetup{},
+		configRepo: nil,
+	}
+
+	result := cmd.isShellConfigured(shellConfigPath)
+	if !result {
+		t.Error("Expected isShellConfigured to return true when wrapper AND init present")
+	}
+}
+
+// TestIsShellConfigured_Legacy verifies returns false when only init present (no wrapper)
+func TestIsShellConfigured_Legacy(t *testing.T) {
+	tmpDir := t.TempDir()
+	shellConfigPath := filepath.Join(tmpDir, ".bashrc")
+	// Legacy shell config with ONLY init, no wrapper
+	os.WriteFile(shellConfigPath, []byte(`eval "$(jem init)"`+"\n"), 0644)
+
+	cmd := &SetupCommand{
+		platform:   &MockPlatformForSetup{},
+		configRepo: nil,
+	}
+
+	result := cmd.isShellConfigured(shellConfigPath)
+	if result {
+		t.Error("Expected isShellConfigured to return false for legacy config (init only, no wrapper)")
+	}
+}
+
+// TestIsShellConfigured_OnlyWrapper verifies returns false when only wrapper present
+func TestIsShellConfigured_OnlyWrapper(t *testing.T) {
+	tmpDir := t.TempDir()
+	shellConfigPath := filepath.Join(tmpDir, ".bashrc")
+	// Shell config with ONLY wrapper, no init
+	content := `jem() {
+    case "$1" in
+        use)
+            shift
+            eval "$(command jem use "$@" --output-env)"
+            ;;
+        *)
+            command jem "$@"
+            ;;
+    esac
+}
+`
+	os.WriteFile(shellConfigPath, []byte(content), 0644)
+
+	cmd := &SetupCommand{
+		platform:   &MockPlatformForSetup{},
+		configRepo: nil,
+	}
+
+	result := cmd.isShellConfigured(shellConfigPath)
+	if result {
+		t.Error("Expected isShellConfigured to return false when only wrapper present (no init)")
+	}
+}
+
+// TestSetup_WrapperInstalled_Bash verifies fresh setup installs wrapper + init for Bash
+func TestSetup_WrapperInstalled_Bash(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, ".jem", "config.toml")
+	shellConfigPath := filepath.Join(tmpDir, ".bashrc")
+
+	// Create config directory
+	os.MkdirAll(filepath.Dir(configPath), 0755)
+
+	repo := config.NewTOMLConfigRepository(configPath)
+
+	platform := &MockPlatformForSetup{
+		HomeDirFunc:         func() string { return tmpDir },
+		DetectShellFunc:     func() config.Shell { return config.ShellBash },
+		ShellConfigPathFunc: func(shell config.Shell) string { return shellConfigPath },
+	}
+
+	cmd := &SetupCommand{
+		platform:   platform,
+		configRepo: repo,
+	}
+
+	err := cmd.Execute(context.Background())
+	if err != nil {
+		t.Errorf("Expected no error, got: %v", err)
+	}
+
+	content, err := os.ReadFile(shellConfigPath)
+	if err != nil {
+		t.Fatalf("Expected shell config to exist, got error: %v", err)
+	}
+
+	contentStr := string(content)
+
+	// Should contain wrapper function
+	if !strings.Contains(contentStr, "jem() {") {
+		t.Error("Expected shell config to contain wrapper function")
+	}
+
+	// Should contain jem init
+	if !strings.Contains(contentStr, `eval "$(jem init)"`) {
+		t.Error("Expected shell config to contain jem init")
+	}
+
+	// Verify wrapper comes BEFORE init
+	wrapperIdx := strings.Index(contentStr, "jem() {")
+	initIdx := strings.Index(contentStr, `eval "$(jem init)"`)
+	if wrapperIdx >= initIdx {
+		t.Error("Expected wrapper function to appear BEFORE init line")
+	}
+}
+
+// TestSetup_WrapperInstalled_PowerShell verifies fresh setup installs wrapper + init for PowerShell
+func TestSetup_WrapperInstalled_PowerShell(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, ".jem", "config.toml")
+	shellConfigPath := filepath.Join(tmpDir, "Microsoft.PowerShell_profile.ps1")
+
+	// Create config directory
+	os.MkdirAll(filepath.Dir(configPath), 0755)
+
+	repo := config.NewTOMLConfigRepository(configPath)
+
+	platform := &MockPlatformForSetup{
+		HomeDirFunc:         func() string { return tmpDir },
+		DetectShellFunc:     func() config.Shell { return config.ShellPowerShell },
+		ShellConfigPathFunc: func(shell config.Shell) string { return shellConfigPath },
+	}
+
+	cmd := &SetupCommand{
+		platform:   platform,
+		configRepo: repo,
+	}
+
+	err := cmd.Execute(context.Background())
+	if err != nil {
+		t.Errorf("Expected no error, got: %v", err)
+	}
+
+	content, err := os.ReadFile(shellConfigPath)
+	if err != nil {
+		t.Fatalf("Expected shell config to exist, got error: %v", err)
+	}
+
+	contentStr := string(content)
+
+	// Should contain wrapper function
+	if !strings.Contains(contentStr, "function jem {") {
+		t.Error("Expected shell config to contain wrapper function")
+	}
+
+	// Should contain jem init
+	if !strings.Contains(contentStr, "jem init | Invoke-Expression") {
+		t.Error("Expected shell config to contain jem init | Invoke-Expression")
+	}
+
+	// Verify wrapper comes BEFORE init
+	wrapperIdx := strings.Index(contentStr, "function jem {")
+	initIdx := strings.Index(contentStr, "jem init | Invoke-Expression")
+	if wrapperIdx >= initIdx {
+		t.Error("Expected wrapper function to appear BEFORE init line")
+	}
+}
+
+// TestSetup_LegacyUpgrade verifies existing init-only config gets wrapper added
+func TestSetup_LegacyUpgrade(t *testing.T) {
+	tmpDir := t.TempDir()
+	jemDir := filepath.Join(tmpDir, ".jem")
+	os.MkdirAll(jemDir, 0755)
+
+	configPath := filepath.Join(jemDir, "config.toml")
+	shellConfigPath := filepath.Join(tmpDir, ".bashrc")
+
+	// Create existing config
+	os.WriteFile(configPath, []byte("[general]\ndefault_provider = 'temurin'\n"), 0644)
+
+	// Create shell config with LEGACY setup (init only, no wrapper)
+	originalContent := "# Legacy setup\neval \"$(jem init)\"\n"
+	os.WriteFile(shellConfigPath, []byte(originalContent), 0644)
+
+	repo := config.NewTOMLConfigRepository(configPath)
+
+	platform := &MockPlatformForSetup{
+		HomeDirFunc:         func() string { return tmpDir },
+		DetectShellFunc:     func() config.Shell { return config.ShellBash },
+		ShellConfigPathFunc: func(shell config.Shell) string { return shellConfigPath },
+	}
+
+	cmd := &SetupCommand{
+		platform:   platform,
+		configRepo: repo,
+	}
+
+	err := cmd.Execute(context.Background())
+	if err != nil {
+		t.Errorf("Expected no error, got: %v", err)
+	}
+
+	content, err := os.ReadFile(shellConfigPath)
+	if err != nil {
+		t.Fatalf("Expected shell config to exist, got error: %v", err)
+	}
+
+	contentStr := string(content)
+
+	// Should still contain original content
+	if !strings.Contains(contentStr, "# Legacy setup") {
+		t.Error("Expected shell config to preserve original content")
+	}
+
+	// Should now contain wrapper function
+	if !strings.Contains(contentStr, "jem() {") {
+		t.Error("Expected shell config to have wrapper added")
+	}
+
+	// Should still contain jem init
+	if !strings.Contains(contentStr, `eval "$(jem init)"`) {
+		t.Error("Expected shell config to still contain jem init")
+	}
+
+	// Verify wrapper appears BEFORE init
+	wrapperIdx := strings.Index(contentStr, "jem() {")
+	initIdx := strings.Index(contentStr, `eval "$(jem init)"`)
+	if wrapperIdx >= initIdx {
+		t.Error("Expected wrapper function to appear BEFORE init line")
+	}
+}
+
+// TestSetup_NoDuplicateWrapper verifies running setup twice doesn't duplicate wrapper
+func TestSetup_NoDuplicateWrapper(t *testing.T) {
+	tmpDir := t.TempDir()
+	jemDir := filepath.Join(tmpDir, ".jem")
+	os.MkdirAll(jemDir, 0755)
+
+	configPath := filepath.Join(jemDir, "config.toml")
+	shellConfigPath := filepath.Join(tmpDir, ".bashrc")
+
+	// Create existing config
+	os.WriteFile(configPath, []byte("[general]\ndefault_provider = 'temurin'\n"), 0644)
+
+	repo := config.NewTOMLConfigRepository(configPath)
+
+	platform := &MockPlatformForSetup{
+		HomeDirFunc:         func() string { return tmpDir },
+		DetectShellFunc:     func() config.Shell { return config.ShellBash },
+		ShellConfigPathFunc: func(shell config.Shell) string { return shellConfigPath },
+	}
+
+	cmd := &SetupCommand{
+		platform:   platform,
+		configRepo: repo,
+	}
+
+	// First setup
+	err := cmd.Execute(context.Background())
+	if err != nil {
+		t.Fatalf("First setup failed: %v", err)
+	}
+
+	content1, err := os.ReadFile(shellConfigPath)
+	if err != nil {
+		t.Fatalf("Expected shell config to exist after first setup, got error: %v", err)
+	}
+
+	// Second setup - should be idempotent
+	err = cmd.Execute(context.Background())
+	if err != nil {
+		t.Errorf("Second setup failed: %v", err)
+	}
+
+	content2, err := os.ReadFile(shellConfigPath)
+	if err != nil {
+		t.Fatalf("Expected shell config to exist after second setup, got error: %v", err)
+	}
+
+	// Content should be identical after second setup (idempotent)
+	if string(content1) != string(content2) {
+		t.Errorf("Expected shell config to be unchanged after second setup. First:\n%s\n\nSecond:\n%s", content1, content2)
+	}
+
+	// Count wrapper occurrences - should be exactly 1
+	wrapperCount := strings.Count(string(content2), "jem() {")
+	if wrapperCount != 1 {
+		t.Errorf("Expected exactly 1 wrapper function, found %d", wrapperCount)
 	}
 }

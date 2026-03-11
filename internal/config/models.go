@@ -19,11 +19,15 @@ type GeneralConfig struct {
 
 // JDKConfig contains JDK-specific settings
 type JDKConfig struct {
+	// Current is the current session JDK version (may differ from default)
+	// Set when running 'jem use jdk <version>' without --default flag
 	Current string `toml:"current"`
 }
 
 // GradleConfig contains Gradle-specific settings
 type GradleConfig struct {
+	// Current is the current session Gradle version (may differ from default)
+	// Set when running 'jem use gradle <version>' without --default flag
 	Current string `toml:"current"`
 }
 
@@ -43,8 +47,13 @@ type GradleInfo struct {
 }
 
 // DefaultsConfig contains default version settings
+// These values persist across sessions and are set with 'jem use <tool> <version> --default'
 type DefaultsConfig struct {
-	JDK    string `toml:"jdk"`
+	// JDK is the persistent default JDK version (survives shell restarts)
+	// Set when running 'jem use jdk <version> --default' or 'jem use default jdk <version>'
+	JDK string `toml:"jdk"`
+	// Gradle is the persistent default Gradle version (survives shell restarts)
+	// Set when running 'jem use gradle <version> --default' or 'jem use default gradle <version>'
 	Gradle string `toml:"gradle"`
 }
 

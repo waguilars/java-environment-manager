@@ -384,3 +384,151 @@ func TestDetectShell_FishVersion(t *testing.T) {
 		t.Errorf("Expected ShellFish, got %s", shell)
 	}
 }
+
+// Bash Wrapper Function Tests
+func TestBashGenerator_GenerateWrapperFunction(t *testing.T) {
+	gen := NewBashGenerator()
+	wrapper := gen.GenerateWrapperFunction()
+
+	// Check for function definition
+	if !strings.Contains(wrapper, "jem() {") {
+		t.Error("Expected wrapper to contain 'jem() {' function definition")
+	}
+
+	// Check for "use" subcommand interception
+	if !strings.Contains(wrapper, `case "$1" in`) {
+		t.Error("Expected wrapper to contain case statement for $1")
+	}
+
+	// Check for use pattern
+	if !strings.Contains(wrapper, "use)") {
+		t.Error("Expected wrapper to contain 'use)' pattern")
+	}
+
+	// Check for command jem use "$@" --output-env
+	if !strings.Contains(wrapper, `command jem use "$@" --output-env`) {
+		t.Error("Expected wrapper to contain 'command jem use \"$@\" --output-env'")
+	}
+
+	// Check for eval
+	if !strings.Contains(wrapper, `eval "$(`) {
+		t.Error("Expected wrapper to contain eval statement")
+	}
+
+	// Check for pass-through to non-use commands
+	if !strings.Contains(wrapper, "*)") {
+		t.Error("Expected wrapper to contain '*' case for pass-through")
+	}
+
+	// Check for command jem "$@" for pass-through
+	if !strings.Contains(wrapper, `command jem "$@"`) {
+		t.Error("Expected wrapper to contain 'command jem \"$@\"' for pass-through")
+	}
+}
+
+// Zsh Wrapper Function Tests
+func TestZshGenerator_GenerateWrapperFunction(t *testing.T) {
+	gen := NewZshGenerator()
+	wrapper := gen.GenerateWrapperFunction()
+
+	// Check for function definition
+	if !strings.Contains(wrapper, "jem() {") {
+		t.Error("Expected wrapper to contain 'jem() {' function definition")
+	}
+
+	// Check for "use" subcommand interception
+	if !strings.Contains(wrapper, `case "$1" in`) {
+		t.Error("Expected wrapper to contain case statement for $1")
+	}
+
+	// Check for use pattern
+	if !strings.Contains(wrapper, "use)") {
+		t.Error("Expected wrapper to contain 'use)' pattern")
+	}
+
+	// Check for command jem use "$@" --output-env
+	if !strings.Contains(wrapper, `command jem use "$@" --output-env`) {
+		t.Error("Expected wrapper to contain 'command jem use \"$@\" --output-env'")
+	}
+
+	// Check for eval
+	if !strings.Contains(wrapper, `eval "$(`) {
+		t.Error("Expected wrapper to contain eval statement")
+	}
+
+	// Check for pass-through to non-use commands
+	if !strings.Contains(wrapper, "*)") {
+		t.Error("Expected wrapper to contain '*' case for pass-through")
+	}
+
+	// Check for command jem "$@" for pass-through
+	if !strings.Contains(wrapper, `command jem "$@"`) {
+		t.Error("Expected wrapper to contain 'command jem \"$@\"' for pass-through")
+	}
+}
+
+// PowerShell Wrapper Function Tests
+func TestPowerShellGenerator_GenerateWrapperFunction(t *testing.T) {
+	gen := NewPowerShellGenerator()
+	wrapper := gen.GenerateWrapperFunction()
+
+	// Check for function definition
+	if !strings.Contains(wrapper, "function jem {") {
+		t.Error("Expected wrapper to contain 'function jem {' definition")
+	}
+
+	// Check for param block with ValueFromRemainingArguments
+	if !strings.Contains(wrapper, "[Parameter(ValueFromRemainingArguments)]$Args") {
+		t.Error("Expected wrapper to contain param block with ValueFromRemainingArguments")
+	}
+
+	// Check for use subcommand interception
+	if !strings.Contains(wrapper, "if ($Args[0] -eq 'use')") {
+		t.Error("Expected wrapper to check for 'use' subcommand")
+	}
+
+	// Check for capturing output with 2>&1
+	if !strings.Contains(wrapper, "--output-env 2>&1") {
+		t.Error("Expected wrapper to capture output with '2>&1'")
+	}
+
+	// Check for LASTEXITCODE validation
+	if !strings.Contains(wrapper, "$LASTEXITCODE -eq 0") {
+		t.Error("Expected wrapper to check $LASTEXITCODE")
+	}
+
+	// Check for Invoke-Expression on success
+	if !strings.Contains(wrapper, "Invoke-Expression $output") {
+		t.Error("Expected wrapper to contain 'Invoke-Expression $output'")
+	}
+
+	// Check for error display via Write-Host
+	if !strings.Contains(wrapper, "Write-Host $output") {
+		t.Error("Expected wrapper to display errors via 'Write-Host $output'")
+	}
+
+	// Check for pass-through to non-use commands
+	if !strings.Contains(wrapper, "} else {") {
+		t.Error("Expected wrapper to contain else block for pass-through")
+	}
+
+	// Check for & jem @Args for pass-through
+	if !strings.Contains(wrapper, "& jem @Args") {
+		t.Error("Expected wrapper to contain '& jem @Args' for pass-through")
+	}
+}
+
+// Fish Wrapper Function Tests
+func TestFishGenerator_GenerateWrapperFunction(t *testing.T) {
+	gen := NewFishGenerator()
+	wrapper := gen.GenerateWrapperFunction()
+
+	// Fish wrapper should return a comment explaining lack of support
+	if !strings.Contains(wrapper, "Fish shell wrapper not supported") {
+		t.Error("Expected wrapper to indicate Fish shell is not supported")
+	}
+
+	if !strings.Contains(wrapper, "jem use default") {
+		t.Error("Expected wrapper to suggest using 'jem use default'")
+	}
+}

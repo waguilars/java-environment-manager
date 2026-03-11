@@ -294,9 +294,9 @@ Use --output-env to output environment variables for shell eval instead.`,
 			// Default: update symlinks for current session only
 			// --default: update symlinks and config (persist)
 			// --output-env: output exports for eval
-			mode := UseModeSessionSymlink
+			mode := UseModeSession
 			if getFlagBool(cmd, "output-env") {
-				mode = UseModeSession
+				mode = UseModeEnv
 			} else if getFlagBool(cmd, "default") {
 				mode = UseModeDefault
 			}
@@ -343,9 +343,9 @@ Use --output-env to output environment variables for shell eval instead.`,
 			// Default: update symlinks for current session only
 			// --default: update symlinks and config (persist)
 			// --output-env: output exports for eval
-			mode := UseModeSessionSymlink
+			mode := UseModeSession
 			if getFlagBool(cmd, "output-env") {
-				mode = UseModeSession
+				mode = UseModeEnv
 			} else if getFlagBool(cmd, "default") {
 				mode = UseModeDefault
 			}

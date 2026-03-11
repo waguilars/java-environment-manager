@@ -18,7 +18,22 @@ func (g *PowerShellGenerator) Name() string {
 	return "powershell"
 }
 
-// GenerateInitScript generates a PowerShell initialization script
+// GenerateWrapperFunction generates a PowerShell function wrapper for jem use auto-execution
+func (g *PowerShellGenerator) GenerateWrapperFunction() string {
+	return `function jem {
+    param([Parameter(ValueFromRemainingArguments)]$Args)
+    if ($Args[0] -eq 'use') {
+        $output = & jem $Args --output-env 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            Invoke-Expression $output
+        } else {
+            Write-Host $output
+        }
+    } else {
+        & jem @Args
+    }
+}`
+}
 func (g *PowerShellGenerator) GenerateInitScript(envVars map[string]string) string {
 	var lines []string
 

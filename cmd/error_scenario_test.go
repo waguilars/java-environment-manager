@@ -194,7 +194,7 @@ func TestUseCommand_SessionMode_UninstalledJDK(t *testing.T) {
 	}
 
 	// Try session mode with uninstalled JDK
-	err = cmd.ExecuteJDK(context.Background(), "not-installed-21", UseModeSession)
+	err = cmd.ExecuteJDK(context.Background(), "not-installed-21", UseModeEnv)
 	if err == nil {
 		t.Error("Expected error for uninstalled JDK in session mode")
 	}

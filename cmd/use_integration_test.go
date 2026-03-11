@@ -120,7 +120,7 @@ func TestUseCommand_SessionMode_OutputsEnv(t *testing.T) {
 	}
 
 	output := captureOutputUse(func() {
-		err = cmd.ExecuteJDK(context.Background(), "21.0.1", UseModeSession)
+		err = cmd.ExecuteJDK(context.Background(), "21.0.1", UseModeEnv)
 	})
 
 	if err != nil {
@@ -205,7 +205,7 @@ func TestUseCommand_SessionMode_DefaultSymlinkUnchanged(t *testing.T) {
 	}
 
 	_ = captureOutputUse(func() {
-		err = cmd.ExecuteJDK(context.Background(), "21.0.1", UseModeSession)
+		err = cmd.ExecuteJDK(context.Background(), "21.0.1", UseModeEnv)
 	})
 
 	if err != nil {
@@ -545,7 +545,7 @@ func TestUseCommand_SessionMode_Gradle(t *testing.T) {
 	}
 
 	output := captureOutputUse(func() {
-		err = cmd.ExecuteGradle(context.Background(), "8.5", UseModeSession)
+		err = cmd.ExecuteGradle(context.Background(), "8.5", UseModeEnv)
 	})
 
 	if err != nil {

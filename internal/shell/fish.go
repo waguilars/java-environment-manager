@@ -18,7 +18,10 @@ func (g *FishGenerator) Name() string {
 	return "fish"
 }
 
-// GenerateInitScript generates a Fish initialization script
+// GenerateWrapperFunction generates a Fish function wrapper (not supported - stub)
+func (g *FishGenerator) GenerateWrapperFunction() string {
+	return "# Fish shell wrapper not supported - use 'jem use default jdk <version>' for persistent changes"
+}
 func (g *FishGenerator) GenerateInitScript(envVars map[string]string) string {
 	var lines []string
 

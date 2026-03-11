@@ -18,7 +18,20 @@ func (g *BashGenerator) Name() string {
 	return "bash"
 }
 
-// GenerateInitScript generates a Bash initialization script
+// GenerateWrapperFunction generates a Bash function wrapper for jem use auto-execution
+func (g *BashGenerator) GenerateWrapperFunction() string {
+	return `jem() {
+    case "$1" in
+        use)
+            shift
+            eval "$(command jem use "$@" --output-env)"
+            ;;
+        *)
+            command jem "$@"
+            ;;
+    esac
+}`
+}
 func (g *BashGenerator) GenerateInitScript(envVars map[string]string) string {
 	var lines []string
 

@@ -11,6 +11,8 @@ import (
 type ShellGenerator interface {
 	// GenerateInitScript generates a shell script that sets up the environment
 	GenerateInitScript(envVars map[string]string) string
+	// GenerateWrapperFunction generates a shell function wrapper for jem use auto-execution
+	GenerateWrapperFunction() string
 	// Name returns the shell name
 	Name() string
 }

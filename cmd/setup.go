@@ -3,13 +3,13 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/waguilars/java-environment-manager/internal/config"
 	"github.com/waguilars/java-environment-manager/internal/platform"
+	shellgen "github.com/waguilars/java-environment-manager/internal/shell"
 )
 
 // SetupCommand handles the 'jem setup' command
@@ -143,10 +143,13 @@ func (c *SetupCommand) isShellConfigured(shellConfigPath string) bool {
 		return false
 	}
 
-	// Check for new jem init pattern
+	// Check for wrapper function presence and jem init pattern
 	contentStr := string(content)
-	return strings.Contains(contentStr, `eval "$(jem init)"`) ||
-		strings.Contains(contentStr, `Invoke-Expression`) && strings.Contains(contentStr, "jem init")
+	hasWrapper := strings.Contains(contentStr, "jem()") || strings.Contains(contentStr, "function jem")
+	hasInit := strings.Contains(contentStr, `eval "$(jem init)"`) ||
+		(strings.Contains(contentStr, `Invoke-Expression`) && strings.Contains(contentStr, "jem init"))
+
+	return hasWrapper && hasInit
 }
 
 // configureShell adds jem init to the shell's configuration
@@ -179,68 +182,105 @@ func (c *SetupCommand) configureShell(shell config.Shell, shellConfigPath string
 		}
 	}
 
-	// Create backup if file exists
-	if _, err := os.Stat(resolvedPath); err == nil {
-		backupPath := resolvedPath + ".jem.backup"
+	// Get the shell generator for wrapper function
+	generator := shellgen.GetGenerator(shell)
 
-		// Open source file for reading
-		src, err := os.Open(resolvedPath)
-		if err != nil {
-			return fmt.Errorf("failed to open shell config for backup: %w", err)
-		}
+	// Prepare the jem configuration block
+	var jemLines []string
+	jemLines = append(jemLines, "") // Empty line before jem section
+	jemLines = append(jemLines, "# jem initialization")
+	jemLines = append(jemLines, generator.GenerateWrapperFunction())
 
-		// Create backup file
-		dst, err := os.Create(backupPath)
-		if err != nil {
-			src.Close()
-			return fmt.Errorf("failed to create backup file: %w", err)
-		}
-
-		// Copy content
-		if _, err := io.Copy(dst, src); err != nil {
-			src.Close()
-			dst.Close()
-			return fmt.Errorf("failed to copy to backup: %w", err)
-		}
-
-		// Close both files
-		src.Close()
-		dst.Close()
-	}
-
-	// Create directory if it doesn't exist
-	dir := filepath.Dir(resolvedPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("failed to create directory: %w", err)
-	}
-
-	// Open file in append mode
-	file, err := os.OpenFile(resolvedPath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
-	if err != nil {
-		return fmt.Errorf("failed to open file: %w", err)
-	}
-	defer file.Close()
-
-	// Write configuration using jem init pattern
-	var lines []string
 	switch shell {
 	case config.ShellBash, config.ShellZsh:
-		lines = []string{
-			"",
-			"# jem initialization",
-			`eval "$(jem init)"`,
-		}
+		jemLines = append(jemLines, `eval "$(jem init)"`)
 	case config.ShellPowerShell:
-		lines = []string{
-			"",
-			"# jem initialization",
-			`jem init | Invoke-Expression`,
-		}
+		jemLines = append(jemLines, `jem init | Invoke-Expression`)
 	}
 
-	if _, err := file.WriteString(strings.Join(lines, "\n") + "\n"); err != nil {
+	jemBlock := strings.Join(jemLines, "\n") + "\n"
+
+	// Check if file exists
+	_, statErr := os.Stat(resolvedPath)
+	if os.IsNotExist(statErr) {
+		// File doesn't exist - create it with jem config
+		dir := filepath.Dir(resolvedPath)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return fmt.Errorf("failed to create directory: %w", err)
+		}
+		if err := os.WriteFile(resolvedPath, []byte(jemBlock), 0644); err != nil {
+			return fmt.Errorf("failed to write config: %w", err)
+		}
+		return nil
+	}
+
+	if statErr != nil {
+		return fmt.Errorf("failed to stat shell config: %w", statErr)
+	}
+
+	// File exists - check if it's a legacy config (init but no wrapper)
+	content, err := os.ReadFile(resolvedPath)
+	if err != nil {
+		return fmt.Errorf("failed to read shell config: %w", err)
+	}
+
+	contentStr := string(content)
+	hasWrapper := strings.Contains(contentStr, "jem()") || strings.Contains(contentStr, "function jem")
+	hasInit := strings.Contains(contentStr, `eval "$(jem init)"`) ||
+		(strings.Contains(contentStr, "Invoke-Expression") && strings.Contains(contentStr, "jem init"))
+
+	// Create backup before modification
+	backupPath := resolvedPath + ".jem.backup"
+	if err := os.WriteFile(backupPath, content, 0644); err != nil {
+		return fmt.Errorf("failed to create backup: %w", err)
+	}
+
+	var newContent string
+	if hasInit && !hasWrapper {
+		// LEGACY CONFIG: Has init but no wrapper - insert wrapper BEFORE init
+		newContent = insertWrapperBeforeInit(contentStr, generator.GenerateWrapperFunction(), shell)
+	} else {
+		// FRESH CONFIG: No jem config at all - append at the end
+		newContent = contentStr + jemBlock
+	}
+
+	if err := os.WriteFile(resolvedPath, []byte(newContent), 0644); err != nil {
 		return fmt.Errorf("failed to write config: %w", err)
 	}
 
 	return nil
+}
+
+// insertWrapperBeforeInit inserts the wrapper function before the jem init line
+func insertWrapperBeforeInit(content string, wrapper string, shell config.Shell) string {
+	lines := strings.Split(content, "\n")
+	var result []string
+	wrapperInserted := false
+
+	for _, line := range lines {
+		// Check if this is the init line
+		isInitLine := false
+		switch shell {
+		case config.ShellBash, config.ShellZsh:
+			if strings.Contains(line, `eval "$(jem init)"`) {
+				isInitLine = true
+			}
+		case config.ShellPowerShell:
+			if strings.Contains(line, "jem init") && strings.Contains(line, "Invoke-Expression") {
+				isInitLine = true
+			}
+		}
+
+		if isInitLine && !wrapperInserted {
+			// Insert wrapper before init line
+			result = append(result, "")
+			result = append(result, "# jem initialization")
+			result = append(result, wrapper)
+			wrapperInserted = true
+		}
+
+		result = append(result, line)
+	}
+
+	return strings.Join(result, "\n")
 }

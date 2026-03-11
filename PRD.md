@@ -84,6 +84,8 @@
 | PER-06 | No requiere scripts de inicialización por shell | Alta |
 | PER-07 | Funciona automáticamente en todas las sesiones nuevas | Alta |
 | PER-08 | Manejo de JAVA_HOME (symlink o variable de entorno) | Media |
+| PER-09 | Shell function wrapper para `jem use` automático (sin eval manual) | Alta |
+| PER-10 | Soporte Bash/Zsh (Linux/macOS) y PowerShell (Windows) para wrapper | Alta |
 
 ---
 
@@ -197,6 +199,86 @@ jem scan                    # Detecta JDKs y Gradles existentes en el sistema
 | JAVA_HOME | `~/.jem/current/java` (symlink al JDK activo) |
 | GRADLE_HOME | `~/.jem/current/gradle` (symlink al Gradle activo) |
 | PATH | `$JAVA_HOME/bin:$GRADLE_HOME/bin:$PATH` |
+
+### 9.3 Shell Function Wrapper (Automático `jem use`)
+
+**Problema:** `jem` es un proceso binario que no puede modificar las variables de entorno del shell padre. Los usuarios debían ejecutar manualmente `source ~/.zshrc` o `eval "$(jem use jdk 21 --output-env)"`.
+
+**Solución:** Shell function wrapper instalado por `jem setup` que intercepta comandos `jem use` y auto-evalúa el output de `--output-env`.
+
+#### Arquitectura del wrapper
+
+```bash
+# Bash/Zsh (~/.bashrc o ~/.zshrc)
+jem() {
+    case "$1" in
+        use)
+            shift
+            eval "$(command jem use "$@" --output-env)"
+            ;;
+        *)
+            command jem "$@"
+            ;;
+    esac
+}
+```
+
+```powershell
+# PowerShell ($PROFILE)
+function jem {
+    param([Parameter(ValueFromRemainingArguments)]$Args)
+    if ($Args[0] -eq 'use') {
+        $output = & jem $Args --output-env 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            Invoke-Expression $output
+        } else {
+            Write-Host $output
+        }
+    } else {
+        & jem @Args
+    }
+}
+```
+
+#### Flujo de ejecución
+
+```
+Usuario: jem use jdk 21
+    │
+    └─► Shell wrapper intercepta
+            │
+            ├─► Ejecuta: command jem use jdk 21 --output-env
+            │
+            ├─► jem binario devuelve:
+            │       export JAVA_HOME="~/.jem/jdks/21-amzn"
+            │       export PATH="~/.jem/jdks/21-amzn/bin:$PATH"
+            │
+            └─► Wrapper evalúa output → entorno actualizado
+```
+
+#### Soporte por Shell
+
+| Shell | Soporte | Notas |
+|-------|---------|-------|
+| Bash | ✅ | Linux |
+| Zsh | ✅ | Linux/macOS |
+| PowerShell | ✅ | Windows |
+| Fish | ❌ | Limitación del shell - usar `jem use default` |
+
+#### Estado de Validación
+
+| Plataforma | Estado |
+|------------|--------|
+| Linux (Bash) | ✅ Validado manualmente |
+| Linux (Zsh) | ✅ Validado manualmente |
+| Windows (PowerShell) | ⏳ Pendiente de validación |
+| Error handling | ✅ Validado - entorno intacto en errores |
+
+#### Migración para usuarios existentes
+
+1. Ejecutar `jem setup` nuevamente
+2. `source ~/.zshrc` o reiniciar terminal
+3. `jem use jdk 21` funciona inmediatamente
 
 **Archivos de configuración por shell:**
 

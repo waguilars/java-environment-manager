@@ -17,11 +17,11 @@ import (
 type UseMode int
 
 const (
-	// UseModeSession outputs environment variables for the current shell session
-	UseModeSession UseMode = iota
-	// UseModeSessionSymlink updates only symlinks for current session (no config changes)
-	UseModeSessionSymlink
-	// UseModeDefault updates the default version in config and updates symlinks
+	// UseModeEnv outputs environment variables for shell eval (e.g., eval "$(jem use jdk 21 --output-env)")
+	UseModeEnv UseMode = iota
+	// UseModeSession updates symlinks for current session only (no default persistence)
+	UseModeSession
+	// UseModeDefault updates both symlinks and config defaults (persists across sessions)
 	UseModeDefault
 )
 
@@ -98,8 +98,8 @@ func (c *UseCommand) ExecuteJDK(ctx context.Context, jdkName string, mode UseMod
 		jdkPath = filepath.Join(c.platform.HomeDir(), ".jem", "jdks", targetJDK.Version)
 	}
 
-	// Session mode: output environment exports
-	if mode == UseModeSession || c.outputEnv {
+	// Env mode: output environment exports
+	if mode == UseModeEnv || c.outputEnv {
 		// Validate JDK directory exists
 		if _, err := os.Stat(jdkPath); os.IsNotExist(err) {
 			return fmt.Errorf("✗ JDK directory not found: %s\nRun 'jem doctor' for diagnostics", jdkPath)
@@ -111,8 +111,8 @@ func (c *UseCommand) ExecuteJDK(ctx context.Context, jdkName string, mode UseMod
 		return nil
 	}
 
-	// SessionSymlink mode: update symlinks only (no config changes)
-	if mode == UseModeSessionSymlink {
+	// Session mode: update symlinks only (no config changes)
+	if mode == UseModeSession {
 		// Validate JDK directory exists
 		if _, err := os.Stat(jdkPath); os.IsNotExist(err) {
 			return fmt.Errorf("✗ JDK directory not found: %s\nRun 'jem doctor' for diagnostics", jdkPath)
@@ -221,8 +221,8 @@ func (c *UseCommand) ExecuteGradle(ctx context.Context, gradleName string, mode 
 		gradlePath = filepath.Join(c.platform.HomeDir(), ".jem", "gradles", targetGradle.Version)
 	}
 
-	// Session mode: output environment exports
-	if mode == UseModeSession || c.outputEnv {
+	// Env mode: output environment exports
+	if mode == UseModeEnv || c.outputEnv {
 		// Validate Gradle directory exists
 		if _, err := os.Stat(gradlePath); os.IsNotExist(err) {
 			return fmt.Errorf("✗ Gradle directory not found: %s\nRun 'jem doctor' for diagnostics", gradlePath)
@@ -234,8 +234,8 @@ func (c *UseCommand) ExecuteGradle(ctx context.Context, gradleName string, mode 
 		return nil
 	}
 
-	// SessionSymlink mode: update symlinks only (no config changes)
-	if mode == UseModeSessionSymlink {
+	// Session mode: update symlinks only (no config changes)
+	if mode == UseModeSession {
 		// Validate Gradle directory exists
 		if _, err := os.Stat(gradlePath); os.IsNotExist(err) {
 			return fmt.Errorf("✗ Gradle directory not found: %s\nRun 'jem doctor' for diagnostics", gradlePath)

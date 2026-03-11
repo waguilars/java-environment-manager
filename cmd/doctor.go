@@ -44,6 +44,7 @@ func (c *DoctorCommand) Execute() int {
 
 	results := []CheckResult{
 		c.checkCurrentSymlink(),
+		c.checkCurrentGradleSymlink(),
 		c.checkVersionConsistency(),
 	}
 
@@ -64,9 +65,9 @@ func (c *DoctorCommand) Execute() int {
 	return 0
 }
 
-// checkCurrentSymlink verifies ~/.jem/jdks/current exists and points to valid directory
+// checkCurrentSymlink verifies ~/.jem/current/java exists and points to valid directory
 func (c *DoctorCommand) checkCurrentSymlink() CheckResult {
-	currentLink := filepath.Join(c.platform.HomeDir(), ".jem", "jdks", "current")
+	currentLink := filepath.Join(c.platform.HomeDir(), ".jem", "current", "java")
 
 	// Check if symlink exists
 	info, err := os.Lstat(currentLink)
@@ -74,7 +75,7 @@ func (c *DoctorCommand) checkCurrentSymlink() CheckResult {
 		return CheckResult{
 			Name:        "Current JDK Symlink",
 			Status:      StatusWarn,
-			Message:     "~/.jem/jdks/current does not exist",
+			Message:     "~/.jem/current/java does not exist",
 			Remediation: "Run 'jem use jdk <version>' to create it",
 		}
 	}
@@ -84,7 +85,7 @@ func (c *DoctorCommand) checkCurrentSymlink() CheckResult {
 		return CheckResult{
 			Name:        "Current JDK Symlink",
 			Status:      StatusFail,
-			Message:     "~/.jem/jdks/current exists but is not a symlink",
+			Message:     "~/.jem/current/java exists but is not a symlink",
 			Remediation: "Remove it manually and run 'jem use jdk <version>'",
 		}
 	}
@@ -113,6 +114,58 @@ func (c *DoctorCommand) checkCurrentSymlink() CheckResult {
 		Name:    "Current JDK Symlink",
 		Status:  StatusPass,
 		Message: fmt.Sprintf("Points to valid JDK: %s", target),
+	}
+}
+
+// checkCurrentGradleSymlink verifies ~/.jem/current/gradle exists and points to valid directory
+func (c *DoctorCommand) checkCurrentGradleSymlink() CheckResult {
+	currentLink := filepath.Join(c.platform.HomeDir(), ".jem", "current", "gradle")
+
+	// Check if symlink exists
+	info, err := os.Lstat(currentLink)
+	if os.IsNotExist(err) {
+		return CheckResult{
+			Name:        "Current Gradle Symlink",
+			Status:      StatusWarn,
+			Message:     "~/.jem/current/gradle does not exist",
+			Remediation: "Run 'jem use gradle <version>' to create it",
+		}
+	}
+
+	// Check if it's a symlink
+	if info.Mode()&os.ModeSymlink == 0 {
+		return CheckResult{
+			Name:        "Current Gradle Symlink",
+			Status:      StatusFail,
+			Message:     "~/.jem/current/gradle exists but is not a symlink",
+			Remediation: "Remove it manually and run 'jem use gradle <version>'",
+		}
+	}
+
+	// Check if target exists
+	target, err := os.Readlink(currentLink)
+	if err != nil {
+		return CheckResult{
+			Name:        "Current Gradle Symlink",
+			Status:      StatusFail,
+			Message:     fmt.Sprintf("Cannot read symlink: %v", err),
+			Remediation: "Remove it manually and run 'jem use gradle <version>'",
+		}
+	}
+
+	if _, err := os.Stat(target); os.IsNotExist(err) {
+		return CheckResult{
+			Name:        "Current Gradle Symlink",
+			Status:      StatusFail,
+			Message:     fmt.Sprintf("Symlink target does not exist: %s", target),
+			Remediation: "Run 'jem use gradle <version>' to fix",
+		}
+	}
+
+	return CheckResult{
+		Name:    "Current Gradle Symlink",
+		Status:  StatusPass,
+		Message: fmt.Sprintf("Points to valid Gradle: %s", target),
 	}
 }
 

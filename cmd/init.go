@@ -122,28 +122,16 @@ func (c *InitCommand) generateInitScript(cfg *config.Config, shellType config.Sh
 	homeDir := c.platform.HomeDir()
 	envVars := make(map[string]string)
 
-	// Set JAVA_HOME - try new format first, then old format
-	jdkVersion := cfg.Defaults.JDK
-	if jdkVersion == "" {
-		jdkVersion = cfg.JDK.Current // fallback to old format
-	}
-	if jdkVersion != "" {
-		jdkPath := filepath.Join(homeDir, ".jem", "jdks", jdkVersion)
-		if _, err := os.Stat(jdkPath); err == nil {
-			envVars["JAVA_HOME"] = jdkPath
-		}
+	// Set JAVA_HOME - try current symlink first, then fallback to config
+	javaHome := c.getCurrentJavaHome(homeDir, cfg)
+	if javaHome != "" {
+		envVars["JAVA_HOME"] = javaHome
 	}
 
-	// Set GRADLE_HOME - try new format first, then old format
-	gradleVersion := cfg.Defaults.Gradle
-	if gradleVersion == "" {
-		gradleVersion = cfg.Gradle.Current // fallback to old format
-	}
-	if gradleVersion != "" {
-		gradlePath := filepath.Join(homeDir, ".jem", "gradles", gradleVersion)
-		if _, err := os.Stat(gradlePath); err == nil {
-			envVars["GRADLE_HOME"] = gradlePath
-		}
+	// Set GRADLE_HOME - try current symlink first, then fallback to config
+	gradleHome := c.getCurrentGradleHome(homeDir, cfg)
+	if gradleHome != "" {
+		envVars["GRADLE_HOME"] = gradleHome
 	}
 
 	// Get the appropriate generator
@@ -151,6 +139,58 @@ func (c *InitCommand) generateInitScript(cfg *config.Config, shellType config.Sh
 
 	// Generate the init script
 	return generator.GenerateInitScript(envVars)
+}
+
+// getCurrentJavaHome gets JAVA_HOME from symlink or config fallback
+func (c *InitCommand) getCurrentJavaHome(homeDir string, cfg *config.Config) string {
+	// Try to read the current symlink first (most reliable)
+	javaLink := filepath.Join(homeDir, ".jem", "current", "java")
+	if target, err := os.Readlink(javaLink); err == nil {
+		// Verify the target exists
+		if _, err := os.Stat(target); err == nil {
+			return target
+		}
+	}
+
+	// Fallback: try config defaults
+	jdkVersion := cfg.Defaults.JDK
+	if jdkVersion == "" {
+		jdkVersion = cfg.JDK.Current
+	}
+	if jdkVersion != "" {
+		jdkPath := filepath.Join(homeDir, ".jem", "jdks", jdkVersion)
+		if _, err := os.Stat(jdkPath); err == nil {
+			return jdkPath
+		}
+	}
+
+	return ""
+}
+
+// getCurrentGradleHome gets GRADLE_HOME from symlink or config fallback
+func (c *InitCommand) getCurrentGradleHome(homeDir string, cfg *config.Config) string {
+	// Try to read the current symlink first (most reliable)
+	gradleLink := filepath.Join(homeDir, ".jem", "current", "gradle")
+	if target, err := os.Readlink(gradleLink); err == nil {
+		// Verify the target exists
+		if _, err := os.Stat(target); err == nil {
+			return target
+		}
+	}
+
+	// Fallback: try config defaults
+	gradleVersion := cfg.Defaults.Gradle
+	if gradleVersion == "" {
+		gradleVersion = cfg.Gradle.Current
+	}
+	if gradleVersion != "" {
+		gradlePath := filepath.Join(homeDir, ".jem", "gradles", gradleVersion)
+		if _, err := os.Stat(gradlePath); err == nil {
+			return gradlePath
+		}
+	}
+
+	return ""
 }
 
 // GetSymlinkManager returns the symlink manager for testing

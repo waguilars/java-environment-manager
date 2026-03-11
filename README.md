@@ -78,12 +78,48 @@ After installation, run the setup command to initialize jem:
 # Initialize jem configuration and shell integration
 jem setup
 
-# Scan for existing JDKs and Gradles on your system
-jem scan
+# Restart your shell or source the config
+source ~/.zshrc  # or ~/.bashrc on Linux
 
-# Add jem to your shell (if not done automatically)
-eval "$(jem init)"
+# jem use now works immediately (no source needed!)
+jem use jdk 21.0.1
+
+# Verify
+java -version
 ```
+
+### Automatic `jem use` (Shell Wrapper)
+
+Starting with v0.4.0, `jem setup` installs a shell function wrapper that makes `jem use` work immediately without requiring `source` or `eval`:
+
+```bash
+# This now updates the environment immediately
+jem use jdk 21.0.1
+
+# No need for:
+#   source ~/.zshrc
+#   eval "$(jem use jdk 21.0.1 --output-env)"
+```
+
+**How it works:**
+
+The wrapper intercepts `jem use` commands and auto-evaluates the `--output-env` output, updating your shell's environment variables in place.
+
+| Shell | Supported | Notes |
+|-------|-----------|-------|
+| Bash | ✅ | Linux |
+| Zsh | ✅ | Linux/macOS |
+| PowerShell | ✅ | Windows |
+| Fish | ❌ | Use `jem use jdk 21 --default` for persistent changes |
+
+**Validation Status:**
+
+| Platform | Status |
+|----------|--------|
+| Linux (Bash/Zsh) | ✅ Validated |
+| Windows (PowerShell) | ⏳ Pending validation |
+
+**For existing users:** Run `jem setup` again to install the wrapper, then restart your shell.
 
 ### First Time Setup
 
@@ -398,57 +434,68 @@ See [CHANGELOG.md](CHANGELOG.md) for version history.
 
 ## Migration Guide
 
-### Upgrading to v0.4.0+ (Session vs Default Mode)
+### Upgrading to v0.4.0+ (Automatic jem use)
 
-Starting with v0.4.0, jem introduces a clearer distinction between **session** and **default** versions:
+Starting with v0.4.0, jem introduces **automatic `jem use`** via shell function wrappers:
 
-#### Breaking Changes
+#### Key Changes
 
-- **New `[defaults]` configuration section**: Default versions are now stored separately from the current session
-- **`jem init` command**: New command for shell initialization that reads from `[defaults]`
-- **Symlink structure**: Current symlinks moved from `~/.jem/jdks/current` to `~/.jem/current/java`
+- **Shell function wrapper**: `jem setup` now installs a wrapper that intercepts `jem use` commands
+- **Immediate environment updates**: `jem use jdk 21` works immediately without `source` or `eval`
+- **Cross-platform**: Supported on Bash, Zsh (Linux/macOS), and PowerShell (Windows)
 
 #### Migration Steps
 
-1. **Run `jem setup`** to update your shell configuration:
+1. **Run `jem setup`** to install the shell wrapper:
    ```bash
    jem setup
    ```
    This will:
-   - Add `eval "$(jem init)"` to your shell profile
+   - Install the shell function wrapper in your profile
+   - Add `eval "$(jem init)"` (or PowerShell equivalent) to your shell profile
    - Migrate old config format to new format
-   - Update symlinks
 
-2. **Update your shell profile** (if not done automatically):
+2. **Restart your shell or source the config**:
    ```bash
-   # Add to ~/.bashrc, ~/.zshrc, or PowerShell profile
-   eval "$(jem init)"
+   source ~/.zshrc  # or ~/.bashrc
+   # On Windows: restart PowerShell
    ```
 
-3. **Set your default versions**:
+3. **Test the wrapper**:
    ```bash
-   # View current defaults
-   jem current
-
-   # Set new defaults if needed
-   jem use default jdk 21.0.1
-   jem use default gradle 8.5
+   jem use jdk 21.0.1
+   java -version  # Should show the new version immediately
    ```
 
 #### Old vs New Behavior
 
 | Old Behavior (pre-0.4.0) | New Behavior (0.4.0+) |
 |-------------------------|----------------------|
-| `jem use jdk 21` changed default | `jem use jdk 21` still changes default |
+| `jem use jdk 21` required `source ~/.zshrc` | `jem use jdk 21` works immediately |
+| Manual `eval "$(jem use ... --output-env)"` | Automatic via wrapper |
 | No session mode | `jem use jdk 21 --session` for temporary use |
-| `jem setup` managed PATH | `jem init` generates shell script |
-| Symlinks in `jdks/current/` | Symlinks in `current/java` |
-| Config had `[jdk]` and `[gradle]` | Config has `[defaults]` section |
+| `jem setup` managed PATH | Shell wrapper + `jem init` |
+
+#### Shell Support
+
+| Shell | Wrapper Support | Notes |
+|-------|-----------------|-------|
+| Bash | ✅ | Linux |
+| Zsh | ✅ | Linux/macOS |
+| PowerShell | ✅ | Windows |
+| Fish | ❌ | Use `jem use jdk 21 --default` |
+
+#### Validation Status
+
+| Platform | Status |
+|----------|--------|
+| Linux (Bash/Zsh) | ✅ Validated |
+| Windows (PowerShell) | ⏳ Pending validation |
 
 #### Backward Compatibility
 
-- Old `jdk.current` and `gradle.current` values are automatically migrated to `[defaults]`
-- Legacy symlinks in `jdks/current/` remain functional
+- Existing `eval "$(jem use ... --output-env)"` still works
+- Users can remove the wrapper from their profile if they prefer manual eval
 - All existing installed JDKs and Gradles are preserved
 
 ## Contributing

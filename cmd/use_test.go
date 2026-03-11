@@ -646,8 +646,8 @@ func TestUseCommand_ExecuteJDK_SessionMode(t *testing.T) {
 		force:      false,
 	}
 
-	// Use session mode - should output env vars, not update symlinks
-	err = cmd.ExecuteJDK(context.Background(), "21.0.1", UseModeSession)
+	// Use env mode - should output env vars, not update symlinks
+	err = cmd.ExecuteJDK(context.Background(), "21.0.1", UseModeEnv)
 	if err != nil {
 		t.Errorf("Expected no error, got: %v", err)
 	}
@@ -683,8 +683,8 @@ func TestUseCommand_ExecuteJDK_SessionMode_Uninstalled(t *testing.T) {
 		force:      false,
 	}
 
-	// Use session mode with uninstalled JDK
-	err = cmd.ExecuteJDK(context.Background(), "uninstalled-21", UseModeSession)
+	// Use env mode with uninstalled JDK
+	err = cmd.ExecuteJDK(context.Background(), "uninstalled-21", UseModeEnv)
 	if err == nil {
 		t.Error("Expected error for uninstalled JDK in session mode")
 	}
@@ -732,8 +732,8 @@ func TestUseCommand_ExecuteGradle_SessionMode(t *testing.T) {
 		force:      false,
 	}
 
-	// Use session mode - should output env vars
-	err = cmd.ExecuteGradle(context.Background(), "7.6.1", UseModeSession)
+	// Use env mode - should output env vars
+	err = cmd.ExecuteGradle(context.Background(), "7.6.1", UseModeEnv)
 	if err != nil {
 		t.Errorf("Expected no error, got: %v", err)
 	}

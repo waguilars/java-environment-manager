@@ -18,7 +18,20 @@ func (g *ZshGenerator) Name() string {
 	return "zsh"
 }
 
-// GenerateInitScript generates a Zsh initialization script
+// GenerateWrapperFunction generates a Zsh function wrapper for jem use auto-execution
+func (g *ZshGenerator) GenerateWrapperFunction() string {
+	return `jem() {
+    case "$1" in
+        use)
+            shift
+            eval "$(command jem use "$@" --output-env)"
+            ;;
+        *)
+            command jem "$@"
+            ;;
+    esac
+}`
+}
 func (g *ZshGenerator) GenerateInitScript(envVars map[string]string) string {
 	var lines []string
 
